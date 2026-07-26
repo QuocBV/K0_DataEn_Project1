@@ -1,0 +1,25 @@
+version: 2
+
+sources:
+  - name: raw_common
+    database: RAW
+    schema: COMMON
+    description: "Landed by Airbyte (Destinations V2, typed tables) from SSI_Common.raw.*"
+    loaded_at_field: _airbyte_extracted_at
+    freshness:
+      warn_after: {count: 26, period: hour}
+      error_after: {count: 50, period: hour}
+    tables:
+      - name: branch
+      - name: department
+      - name: broker
+      - name: customer
+      - name: customer_broker_history
+      - name: customer_risk_profile
+      - name: customer_segment_history
+      - name: customer_acquisition
+      - name: fee_schedule
+      - name: management_commission_schedule
+      - name: market_index_price
+      - name: trading_alert
+      - name: customer_complaint

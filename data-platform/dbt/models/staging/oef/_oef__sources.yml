@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: raw_oef
+    database: RAW
+    schema: OEF
+    description: >
+      fund/fund_nav_history/account are typed tables landed by Airbyte. *_raw tables are VARIANT
+      landing tables filled by Snowpipe from the Parquet bulk-export path (see
+      data-platform/snowflake/05_bulk_load_oef.sql).
+    tables:
+      - name: fund
+      - name: fund_nav_history
+      - name: account
+      - name: oef_trade_raw
+      - name: account_balance_daily_raw
+      - name: position_daily_raw

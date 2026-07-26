@@ -1,0 +1,30 @@
+name: 'ssi_trading_analytics'
+version: '1.0.0'
+config-version: 2
+
+profile: 'ssi_trading_analytics'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  ssi_trading_analytics:
+    staging:
+      +materialized: view
+      +schema: "{{ 'stg_' ~ node.fqn[1] }}"   # models/staging/<domain>/... -> ANALYTICS.STG_<DOMAIN>
+    marts:
+      +materialized: table
+      +schema: marts
+      dim:
+        +tags: ["dimension"]
+      fact:
+        +tags: ["fact"]
+      reports:
+        +materialized: view   # reports are thin views over fact/dim - always reflect latest dbt run
+        +tags: ["report"]

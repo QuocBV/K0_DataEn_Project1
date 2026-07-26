@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw_derivatives
+    database: RAW
+    schema: DERIVATIVES
+    description: >
+      derivative_contract/daily_settlement_price/account are typed tables landed by Airbyte.
+      *_raw tables are VARIANT landing tables filled by Snowpipe from the Parquet bulk-export path
+      (see data-platform/snowflake/04_bulk_load_derivatives.sql).
+    tables:
+      - name: derivative_contract
+      - name: daily_settlement_price
+      - name: account
+      - name: derivative_trade_raw
+      - name: account_balance_daily_raw
+      - name: position_daily_raw
+      - name: margin_loan_daily_raw

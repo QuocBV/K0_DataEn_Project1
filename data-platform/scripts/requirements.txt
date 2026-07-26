@@ -1,0 +1,3 @@
+# Install from SSI JFrog Artifactory (jfrog.ssi.com.vn), not public PyPI directly.
+pyodbc==5.1.0
+pyarrow==17.0.0

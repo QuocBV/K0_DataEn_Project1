@@ -1,0 +1,5 @@
+# Install from SSI JFrog Artifactory (jfrog.ssi.com.vn), not public PyPI directly.
+# Configure via env, e.g.: pip install -r requirements.txt --index-url $PIP_INDEX_URL
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pyjwt==2.9.0

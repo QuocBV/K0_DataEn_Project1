@@ -1,0 +1,17 @@
+# Octavia CLI source config - SSI_Derivatives (contract master, derivative_trade, account/position/balance/margin).
+# Credentials from env - never hardcode secrets here.
+definition_type: source
+resource_name: "mssql_derivatives"
+definition_id: b5ea17b1-f170-46dc-bc31-cc744ca984c1  # MSSQL source connector
+configuration:
+  host: "${MSSQL_HOST}"
+  port: 1433
+  database: "SSI_Derivatives"
+  username: "${MSSQL_AIRBYTE_READER_USER}"
+  password: "${MSSQL_AIRBYTE_READER_PASSWORD}"
+  schemas:
+    - "raw"
+  ssl_method:
+    ssl_method: "encrypted_trust_server_certificate"
+  replication_method:
+    method: "Standard"

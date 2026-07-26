@@ -1,0 +1,98 @@
+version: 2
+
+models:
+  - name: dim_customer
+    columns:
+      - name: customer_code
+        tests: [not_null, unique]
+      - name: customer_type
+        tests:
+          - accepted_values: {values: ['INDIVIDUAL', 'ORGANIZATION', 'PROPRIETARY']}
+      - name: residency
+        tests:
+          - accepted_values: {values: ['DOMESTIC', 'FOREIGN']}
+
+  - name: dim_customer_history
+    description: "SCD Type 2 history half of the customer profile pair - see dim_customer (current/main) and snapshots/snap_customer_profile.sql (capture mechanism)."
+    columns:
+      - name: customer_code
+        tests: [not_null]
+      - name: valid_from
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [customer_code, valid_from]
+
+  - name: dim_broker
+    columns:
+      - name: broker_code
+        tests: [not_null, unique]
+      - name: broker_type
+        tests:
+          - accepted_values: {values: ['BROKER', 'COLLABORATOR']}
+
+  - name: dim_branch
+    columns:
+      - name: branch_id
+        tests: [not_null, unique]
+
+  - name: dim_department
+    columns:
+      - name: department_id
+        tests: [not_null, unique]
+
+  - name: dim_security
+    columns:
+      - name: security_id
+        tests: [not_null, unique]
+
+  - name: dim_derivative_contract
+    columns:
+      - name: contract_id
+        tests: [not_null, unique]
+
+  - name: dim_fund
+    columns:
+      - name: fund_id
+        tests: [not_null, unique]
+
+  - name: dim_date
+    columns:
+      - name: date_key
+        tests: [not_null, unique]
+
+  - name: fact_equity_trade
+    columns:
+      - name: trade_id
+        tests: [not_null]
+      - name: side
+        tests:
+          - accepted_values: {values: ['BUY', 'SELL']}
+      - name: customer_code
+        tests:
+          - relationships: {to: ref('dim_customer'), field: customer_code}
+      - name: security_id
+        tests:
+          - relationships: {to: ref('dim_security'), field: security_id}
+
+  - name: fact_derivative_trade
+    columns:
+      - name: trade_id
+        tests: [not_null]
+      - name: position_side
+        tests:
+          - accepted_values: {values: ['LONG', 'SHORT']}
+      - name: contract_id
+        tests:
+          - relationships: {to: ref('dim_derivative_contract'), field: contract_id}
+
+  - name: fact_oef_trade
+    columns:
+      - name: trade_id
+        tests: [not_null]
+      - name: transaction_type
+        tests:
+          - accepted_values: {values: ['SUBSCRIBE', 'REDEEM', 'SWITCH']}
+      - name: fund_id
+        tests:
+          - relationships: {to: ref('dim_fund'), field: fund_id}

@@ -1,0 +1,25 @@
+# Copy to profiles.yml (which is gitignored) or point --profiles-dir elsewhere. Never commit real
+# credentials - account/user/password/role all come from env vars injected by CNTT/vault.
+ssi_trading_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_TRANSFORM_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_TRANSFORM_PASSWORD') }}"
+      role: TRANSFORM_ROLE
+      database: ANALYTICS
+      warehouse: WH_TRANSFORM
+      schema: MARTS
+      threads: 8
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_TRANSFORM_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_TRANSFORM_PASSWORD') }}"
+      role: TRANSFORM_ROLE
+      database: ANALYTICS
+      warehouse: WH_TRANSFORM
+      schema: MARTS
+      threads: 16

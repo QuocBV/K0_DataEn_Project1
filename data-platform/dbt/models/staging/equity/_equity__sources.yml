@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: raw_equity
+    database: RAW
+    schema: EQUITY
+    description: >
+      security/daily_price/account are typed tables landed by Airbyte (Destinations V2).
+      equity_trade_raw/account_balance_daily_raw/position_daily_raw/margin_loan_daily_raw are
+      VARIANT landing tables filled by Snowpipe from the Parquet bulk-export path (see
+      data-platform/snowflake/03_bulk_load_equity.sql) - flattened by the staging models here.
+    tables:
+      - name: security
+      - name: daily_price
+      - name: account
+      - name: equity_trade_raw
+      - name: account_balance_daily_raw
+      - name: position_daily_raw
+      - name: margin_loan_daily_raw

@@ -1,0 +1,5 @@
+# Install from SSI JFrog Artifactory (jfrog.ssi.com.vn), not public PyPI directly.
+apache-airflow-providers-airbyte==3.9.0
+apache-airflow-providers-snowflake==5.7.0
+dbt-core==1.8.8
+dbt-snowflake==1.8.4

@@ -1,0 +1,18 @@
+-- Bulk file-based load path for SSI_Derivatives's heavy tables. Same VARIANT-landing design as
+-- 03_bulk_load_equity.sql (read that file's header for the full rationale).
+USE ROLE TRANSFORM_ROLE;
+USE WAREHOUSE WH_INGEST;
+
+CREATE FILE FORMAT IF NOT EXISTS RAW.DERIVATIVES.FF_PARQUET
+    TYPE = PARQUET
+    COMPRESSION = SNAPPY;
+
+CREATE STAGE IF NOT EXISTS RAW.DERIVATIVES.STG_LANDING
+    STORAGE_INTEGRATION = SSI_LANDING_INTEGRATION
+    URL = 'azure://ssidl.blob.core.windows.net/landing/derivatives'
+    FILE_FORMAT = RAW.DERIVATIVES.FF_PARQUET;
+
+CALL RAW.UTIL.CREATE_VARIANT_LANDING('DERIVATIVES', 'DERIVATIVE_TRADE',      'derivative_trade');
+CALL RAW.UTIL.CREATE_VARIANT_LANDING('DERIVATIVES', 'ACCOUNT_BALANCE_DAILY', 'account_balance_daily');
+CALL RAW.UTIL.CREATE_VARIANT_LANDING('DERIVATIVES', 'POSITION_DAILY',       'position_daily');
+CALL RAW.UTIL.CREATE_VARIANT_LANDING('DERIVATIVES', 'MARGIN_LOAN_DAILY',    'margin_loan_daily');

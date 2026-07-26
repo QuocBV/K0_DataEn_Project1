@@ -1,0 +1,41 @@
+# Octavia CLI connection config. Only the small dimension tables sync through Airbyte/JDBC here -
+# equity_trade, account_balance_daily, position_daily and margin_loan_daily are high-volume and
+# instead load via the file-based bulk path (scripts/export_partition_to_parquet.py +
+# snowflake/02_bulk_load_equity.sql), which is far more efficient at this scale. See that SQL
+# file's header comment for the full rationale.
+definition_type: connection
+resource_name: "mssql_equity_to_snowflake"
+source_configuration_path: "sources/mssql_equity.yaml"
+destination_configuration_path: "destinations/snowflake_raw.yaml"
+configuration:
+  schedule_type: manual
+  destination_namespace: "EQUITY"  # lands in RAW.EQUITY
+  namespace_definition: "custom_format"
+  sync_catalog:
+    streams:
+      - stream:
+          name: "security"
+          json_schema: {}
+          supported_sync_modes: ["full_refresh"]
+        config:
+          sync_mode: "full_refresh"
+          destination_sync_mode: "overwrite"
+      - stream:
+          name: "daily_price"
+          json_schema: {}
+          supported_sync_modes: ["full_refresh", "incremental"]
+          default_cursor_field: ["price_date"]
+        config:
+          sync_mode: "incremental"
+          destination_sync_mode: "append_dedup"
+          cursor_field: ["price_date"]
+          primary_key: [["security_id"], ["price_date"]]
+      - stream:
+          name: "account"
+          json_schema: {}
+          supported_sync_modes: ["full_refresh"]
+        config:
+          sync_mode: "full_refresh"
+          destination_sync_mode: "overwrite"
+      # equity_trade / account_balance_daily / position_daily / margin_loan_daily: deliberately
+      # NOT listed here - loaded via Parquet export + Snowpipe/COPY INTO instead.

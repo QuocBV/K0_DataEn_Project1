@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw_hr
+    database: RAW
+    schema: HR
+    description: "Landed by Airbyte from hr-api/ (static/mock today; swap for the real HR system without touching downstream models)"
+    tables:
+      - name: employees
