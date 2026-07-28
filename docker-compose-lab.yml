@@ -1,0 +1,306 @@
+# ═══════════════════════════════════════════════════════════════
+#  SSI TRADING ANALYTICS - LAB LOCAL DOCKER DESKTOP
+# ═══════════════════════════════════════════════════════════════
+#  Chạy: docker compose -f docker-compose-lab.yml up -d
+#  Tắt:  docker compose -f docker-compose-lab.yml down
+#
+#  Services:
+#    hr-api      → http://localhost:8000
+#    airflow     → http://localhost:8080  (user: admin / pass: admin)
+#    superset    → http://localhost:8088  (user: admin / pass: admin)
+#    sqlserver   → localhost:1433         [optional: thêm --profile sqlserver]
+#
+#  Yêu cầu:
+#    1. Docker Desktop
+#    2. File .env (copy từ .env.example), điền:
+#       - SNOWFLAKE_ACCOUNT / TRANSFORM_USER / TRANSFORM_PASSWORD (bắt buộc)
+#       - AWS_ACCESS_KEY_ID / SECRET / S3_BUCKET (nếu dùng meltano)
+#    3. Tài khoản Snowflake free tier (https://signup.snowflake.com/)
+#       + Chạy script Setup: data-platform/snowflake/*.sql
+#       + Tạo database ANALYTICS với 3 schemas: RAW, STAGING, MARTS
+#
+#  Sau khi chạy:
+#    Airflow UI  → http://localhost:8080 → Trigger DAG: generate_trading_data
+#    Superset UI → http://localhost:8088 → Add Snowflake connection
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─── 1. Mock HR API ──────────────────────────────────────────
+  hr-api:
+    build:
+      context: ./hr-api
+    environment:
+      HR_API_AUTH_MODE: none
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - ssi-lab
+
+  # ─── 2. Airflow Metadata DB (PostgreSQL) ────────────────────
+  airflow-postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow_lab_pass}
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ssi-lab
+
+  # ─── 3. Airflow Init (chạy 1 lần khi start) ─────────────────
+  airflow-init:
+    build:
+      context: ./data-platform/airflow
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:-airflow_lab_pass}@airflow-postgres/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      # Snowflake credentials (bắt buộc - phải điền trong .env)
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
+      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+
+      # AWS S3 credentials (chỉ cần nếu dùng Meltano EL)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX:-elt/}
+
+      # SQL Server (chỉ cần nếu dùng Meltano extract từ SQL Server)
+      MSSQL_HOST: ${MSSQL_HOST:-sqlserver,1433}
+      MSSQL_EXPORT_USER: ${MSSQL_EXPORT_USER:-export_reader}
+      MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
+
+      # HR API
+      HR_API_BASE_URL: http://hr-api:8000
+
+      # Webhook cảnh báo (tuỳ chọn)
+      OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
+    entrypoint: /bin/bash
+    command: >
+      sh -c "
+      airflow db migrate &&
+      airflow users create
+        --username ${AIRFLOW_ADMIN_USER:-admin}
+        --password ${AIRFLOW_ADMIN_PASSWORD:-admin}
+        --firstname Admin --lastname User
+        --role Admin --email admin@ssi.com.vn
+      "
+    networks:
+      - ssi-lab
+
+  # ─── 4. Airflow Webserver (UI) ──────────────────────────────
+  airflow-webserver:
+    build:
+      context: ./data-platform/airflow
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes:
+      - ./data-platform/dbt:/opt/airflow/data-platform/dbt
+      - ./data-platform/meltano:/opt/airflow/data-platform/meltano
+      - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ./data-platform/airflow/dags:/opt/airflow/dags
+    ports:
+      - "8080:8080"
+    command: webserver
+    restart: unless-stopped
+    networks:
+      - ssi-lab
+
+  # ─── 5. Airflow Scheduler ───────────────────────────────────
+  airflow-scheduler:
+    build:
+      context: ./data-platform/airflow
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes:
+      - ./data-platform/dbt:/opt/airflow/data-platform/dbt
+      - ./data-platform/meltano:/opt/airflow/data-platform/meltano
+      - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ./data-platform/airflow/dags:/opt/airflow/dags
+    command: scheduler
+    restart: unless-stopped
+    networks:
+      - ssi-lab
+
+  # ─── 6. Superset Metadata DB (PostgreSQL) ──────────────────
+  superset-postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: ${SUPERSET_DB_PASSWORD:-superset_lab_pass}
+      POSTGRES_DB: superset
+    volumes:
+      - superset_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ssi-lab
+
+  # ─── 7. Apache Superset (BI Dashboard) ─────────────────────
+  superset:
+    image: apache/superset:latest
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-lab_secret_key_123}
+      SUPERSET_LOAD_EXAMPLES: "no"
+    depends_on:
+      superset-postgres:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    command: >
+      sh -c "
+      superset fab create-admin
+        --username ${SUPERSET_ADMIN_USER:-admin}
+        --firstname Admin --lastname User
+        --email admin@ssi.com.vn
+        --password ${SUPERSET_ADMIN_PASSWORD:-admin}
+      && superset db upgrade
+      && superset init
+      && superset run -p 8088 --with-threads --reload --debugger
+      "
+    volumes:
+      - superset_home:/app/superset_home
+    restart: unless-stopped
+    networks:
+      - ssi-lab
+
+  # ─── 8. SQL Server (optional: chạy khi cần DB nguồn thật) ───
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Lab@Pass123}
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    profiles: ["sqlserver"]
+    networks:
+      - ssi-lab
+
+  # ─── 9. dbt (ad-hoc tool: docker compose run --rm dbt) ─────
+  dbt:
+    build: { context: ./data-platform/dbt }
+    environment:
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
+      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+    volumes:
+      - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
+    profiles: ["tools"]
+    networks:
+      - ssi-lab
+
+  # ─── 10. Meltano (ad-hoc tool: docker compose run --rm meltano) ─
+  meltano:
+    build: { context: ./data-platform/meltano }
+    environment:
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
+      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX:-elt/}
+      MSSQL_HOST: ${MSSQL_HOST:-sqlserver,1433}
+      MSSQL_EXPORT_USER: ${MSSQL_EXPORT_USER:-export_reader}
+      MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
+      HR_API_BASE_URL: http://host.docker.internal:8000
+    volumes:
+      - ./data-platform/meltano:/meltano/project
+    working_dir: /meltano/project
+    entrypoint: ["meltano"]
+    profiles: ["tools"]
+    networks:
+      - ssi-lab
+
+  # ─── 11. LAB INIT - Tự động cấu hình Airflow ─────────────────
+  lab-init:
+    image: apache/airflow:2.10.2-python3.12
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD:-airflow_lab_pass}@airflow-postgres/airflow
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
+      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+    entrypoint: /bin/bash
+    command: >
+      sh -c "
+      echo '══════════════════════════════════════════' &&
+      echo '  LAB INIT - Configuring Airflow' &&
+      echo '══════════════════════════════════════════' &&
+
+      # 1. Tạo Snowflake connection cho Airflow
+      airflow connections add 'snowflake_default' \
+        --conn-type 'snowflake' \
+        --conn-login '${SNOWFLAKE_TRANSFORM_USER}' \
+        --conn-password '${SNOWFLAKE_TRANSFORM_PASSWORD}' \
+        --conn-host '${SNOWFLAKE_ACCOUNT}' \
+        --conn-extra '{ \"warehouse\": \"TRANSFORM_WH\", \"role\": \"TRANSFORM_ROLE\", \"database\": \"ANALYTICS\" }' &&
+      echo '✓ Snowflake connection created' &&
+
+      # 2. Unpause DAGs để sẵn sàng chạy
+      airflow dags unpause generate_trading_data &&
+      airflow dags unpause dbt_transform &&
+      airflow dags unpause soda_checks &&
+      echo '✓ DAGs unpaused' &&
+
+      echo '' &&
+      echo '══════════════════════════════════════════' &&
+      echo '  LAB IS READY!' &&
+      echo '══════════════════════════════════════════' &&
+      echo '  Airflow  → http://localhost:8080' &&
+      echo '  Username: ${AIRFLOW_ADMIN_USER:-admin}' &&
+      echo '  Password: ${AIRFLOW_ADMIN_PASSWORD:-admin}' &&
+      echo '' &&
+      echo '  Superset → http://localhost:8088' &&
+      echo '  Username: ${SUPERSET_ADMIN_USER:-admin}' &&
+      echo '  Password: ${SUPERSET_ADMIN_PASSWORD:-admin}' &&
+      echo '' &&
+      echo '  HR API   → http://localhost:8000' &&
+      echo '' &&
+      echo '  👉 Bước tiếp theo:' &&
+      echo '  1. Vào Airflow UI → Trigger DAG: generate_trading_data' &&
+      echo '  2. Đợi DAG chạy xong (sinh 50+20+15 giao dịch mẫu)' &&
+      echo '  3. Trigger DAG: dbt_transform (build dim + fact + reports)' &&
+      echo '  4. Trigger DAG: soda_checks (kiểm tra chất lượng)' &&
+      echo '  5. Vào Superset → kết nối Snowflake → xem báo cáo' &&
+      echo '══════════════════════════════════════════'
+      "
+    networks:
+      - ssi-lab
+
+networks:
+  ssi-lab:
+    driver: bridge
+
+volumes:
+  airflow_postgres_data:
+  superset_postgres_data:
+  superset_home:
+  mssql_data:

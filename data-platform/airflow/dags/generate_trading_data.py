@@ -62,22 +62,21 @@ def _fetch_reference_data(cursor) -> dict[str, Any]:
     cursor.execute("SELECT fund_id, fund_code FROM ANALYTICS.MARTS.dim_fund")
     ref["funds"] = [(row[0], row[1]) for row in cursor.fetchall()]
 
-    # Fetch accounts for each product type (from fact_account_balance_daily or staging)
-    for product_type, schema in [("EQUITY", "STG_EQUITY"), ("DERIVATIVES", "STG_DERIVATIVES"), ("OEF", "STG_OEF")]:
+    # Fetch accounts for each product type from staging schemas
+    for product_type in ["EQUITY", "DERIVATIVES", "OEF"]:
+        schema = f"STG_{product_type}"
         try:
             cursor.execute(f"SELECT DISTINCT account_no, customer_code, broker_code FROM ANALYTICS.{schema}.account")
-            ref[f"accounts_{product_type.lower()}"] = [
-                (row[0], row[1], row[2]) for row in cursor.fetchall()
-            ]
-        except Exception:
-            # Fallback: use trade accounts from existing data
-            cursor.execute(f"""
-                SELECT DISTINCT account_no, customer_code, broker_code 
-                FROM ANALYTICS.STG_{'EQUITY' if product_type == 'EQUITY' else product_type}.account
-            """)
-            ref[f"accounts_{product_type.lower()}"] = [
-                (row[0], row[1], row[2]) for row in cursor.fetchall()
-            ]
+            rows = cursor.fetchall()
+            if rows:
+                ref[f"accounts_{product_type.lower()}"] = [(row[0], row[1], row[2]) for row in rows]
+                print(f"  Found {len(rows)} accounts in ANALYTICS.{schema}.account")
+            else:
+                ref[f"accounts_{product_type.lower()}"] = []
+                print(f"  WARNING: No accounts found in ANALYTICS.{schema}.account")
+        except Exception as e:
+            print(f"  WARNING: Cannot fetch from ANALYTICS.{schema}.account: {e}")
+            ref[f"accounts_{product_type.lower()}"] = []
 
     return ref
 
