@@ -1,0 +1,54 @@
+# SodaCL checks for Gold layer (marts)
+# These run after dbt transform to ensure data quality before BI serving.
+
+checks for dim_broker:
+  - row_count > 0
+  - duplicate_count(broker_code) = 0
+  - missing_count(broker_code) = 0
+
+checks for dim_customer:
+  - row_count > 0
+  - duplicate_count(customer_code) = 0
+  - missing_count(customer_code) = 0
+  - missing_count(customer_type) = 0
+
+checks for dim_account:
+  - row_count > 0
+  - duplicate_count(account_id) = 0
+  - missing_count(account_id) = 0
+
+checks for dim_security:
+  - row_count > 0
+  - duplicate_count(security_id) = 0
+
+checks for fact_equity_trade:
+  - row_count > 0
+  - missing_count(trade_id) = 0
+  - missing_count(quantity) = 0
+  - missing_count(amount) = 0
+  - duplicate_count(trade_id) = 0
+
+checks for fact_derivative_trade:
+  - row_count > 0
+  - missing_count(trade_id) = 0
+  - duplicate_count(trade_id) = 0
+
+checks for fact_oef_trade:
+  - row_count > 0
+  - missing_count(trade_id) = 0
+  - duplicate_count(trade_id) = 0
+
+# Report checks (views)
+checks for rpt_broker_commission_revenue:
+  - row_count > 0
+  - missing_count(broker_code) = 0
+  - values in (total_commission) must not be < 0
+
+checks for rpt_aum_summary:
+  - row_count > 0
+  - missing_count(customer_code) = 0
+  - values in (aum_amount) must not be < 0
+
+checks for rpt_margin_call_alert:
+  - row_count > 0
+  - missing_count(account_id) = 0

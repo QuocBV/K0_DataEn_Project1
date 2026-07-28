@@ -1,0 +1,124 @@
+version: 1
+default_environment: dev
+
+project_id: "ssi-trading-analytics-meltano"
+
+plugins:
+  extractors:
+    - name: tap-mssql
+      namespace: tap_mssql
+      pip_url: tap-mssql
+      config:
+        host: "${MSSQL_HOST}"
+        port: 1433
+        user: "${MSSQL_EXPORT_USER}"
+        password: "${MSSQL_EXPORT_PASSWORD}"
+        filter_dbs: "SSI_Common,SSI_Equity,SSI_Derivatives,SSI_OEF"
+        # We use STANDARD replication; CDC not needed for dimension tables
+        replication_method: STANDARD
+
+    - name: tap-hr-api
+      namespace: tap_hr_api
+      pip_url: -e extractors/tap_hr_api
+      config:
+        api_base_url: "${HR_API_BASE_URL}"
+        # Auth mode can be 'none', 'api_key', or 'jwt'; default none for dev
+        auth_mode: "${HR_API_AUTH_MODE:-none}"
+        api_key: "${HR_API_KEY:-}"
+        jwt_secret: "${HR_API_JWT_SECRET:-}"
+
+    - name: tap-s3-parquet
+      namespace: tap_s3_parquet
+      pip_url: tap-s3-parquet
+      config:
+        bucket: "${S3_BUCKET}"
+        prefix: "${S3_PREFIX}"
+        file_format: parquet
+        # AWS credentials via environment variables or ~/.aws/credentials
+
+  loaders:
+    - name: target-s3
+      namespace: target_s3
+      pip_url: target-s3
+      config:
+        bucket: "${S3_BUCKET}"
+        prefix: "${S3_PREFIX}raw/{stream_name}/"
+        format: parquet
+        # Partition by date and stream name
+        partition_by: "execution_date"
+
+    - name: target-snowflake
+      namespace: target_snowflake
+      pip_url: target-snowflake
+      config:
+        account: "${SNOWFLAKE_ACCOUNT}"
+        user: "${SNOWFLAKE_TRANSFORM_USER}"
+        password: "${SNOWFLAKE_TRANSFORM_PASSWORD}"
+        database: ANALYTICS
+        schema: RAW
+        warehouse: TRANSFORM_WH
+        role: TRANSFORM_ROLE
+        # For simplicity, we do full refresh for dimension tables; incremental can be added later
+        load_method: FULL_REFRESH
+
+environments:
+  - name: dev
+    config:
+      plugins:
+        extractors:
+          - name: tap-mssql
+            select:
+              - raw.broker.*
+              - raw.branch.*
+              - raw.department.*
+              - raw.customer.*
+              - raw.customer_broker_history.*
+              - raw.customer_risk_profile.*
+              - raw.customer_segment_history.*
+              - raw.customer_acquisition.*
+              - raw.fee_schedule.*
+              - raw.management_commission_schedule.*
+              - raw.market_index_price.*
+              - raw.trading_alert.*
+              - raw.customer_complaint.*
+              - raw.security.*
+              - raw.daily_price.*
+              - raw.account.*
+              - raw.equity_trade.*
+              - raw.account_balance_daily.*
+              - raw.position_daily.*
+              - raw.margin_loan_daily.*
+              - raw.derivative_contract.*
+              - raw.daily_settlement_price.*
+              - raw.derivative_trade.*
+              - raw.fund.*
+              - raw.fund_nav_history.*
+              - raw.oef_trade.*
+          - name: tap-hr-api
+            select:
+              - employees.*
+
+jobs:
+  extract_dimensions:
+    tasks:
+      - tap-mssql target-s3
+  extract_hr:
+    tasks:
+      - tap-hr-api target-s3
+  # For heavy tables, we can run separate pipelines per product to parallelize
+  extract_equity_heavy:
+    tasks:
+      - tap-mssql target-s3 # filtered to equity trade/balance/position/margin
+  extract_derivatives_heavy:
+    tasks:
+      - tap-mssql target-s3
+  extract_oef_heavy:
+    tasks:
+      - tap-mssql target-s3
+  # Staging: copy from S3 to Snowflake
+  load_dimensions:
+    tasks:
+      - tap-s3-parquet target-snowflake
+  load_heavy_tables:
+    tasks:
+      - tap-s3-parquet target-snowflake

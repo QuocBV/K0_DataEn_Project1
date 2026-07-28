@@ -1,16 +1,15 @@
-# Local dev/test orchestration for hr-api, Airflow (orchestration), and dbt (ad-hoc runs).
+# Local dev/test orchestration for hr-api, Airflow, Meltano, dbt, Superset, Soda.
 #
 # NOT included here:
 # - SQL Server (Database/): gated behind the "sqlserver" profile below - it's a large image (EULA
 #   acceptance required) and per SSI policy, pulling it needs explicit confirmation. Run with:
 #     docker compose --profile sqlserver up -d sqlserver
-# - Airbyte: use its own official installer (abctl local install) instead of vendoring Airbyte's
-#   multi-service compose stack (temporal, minio, etc.) here - see
-#   https://docs.airbyte.com/using-airbyte/getting-started/oss-quickstart
+# - Airbyte: REPLACED by Meltano + S3 pipeline - see data-platform/meltano/ for replacement
 # - Snowflake: a managed cloud service, nothing to containerize; supply SNOWFLAKE_* env vars below.
 #
 # All secrets are read from a local .env file (gitignored) - never hardcode credentials in this
 # file. Copy .env.example to .env and fill in real values before running.
+
 services:
   hr-api:
     build:
@@ -59,6 +58,11 @@ services:
       MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
       HR_API_BASE_URL: http://hr-api:8000
       OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX:-elt/}
     entrypoint: /bin/bash
     command: -c "airflow db migrate && airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@ssi.com.vn"
 
@@ -73,7 +77,10 @@ services:
     environment: *airflow-common-env
     volumes:
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
+      - ./data-platform/meltano:/opt/airflow/data-platform/meltano
       - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ${HOME}/.aws/credentials:/home/airflow/.aws/credentials:ro
     ports:
       - "8080:8080"
     command: webserver
@@ -90,9 +97,39 @@ services:
     environment: *airflow-common-env
     volumes:
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
+      - ./data-platform/meltano:/opt/airflow/data-platform/meltano
       - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ${HOME}/.aws/credentials:/home/airflow/.aws/credentials:ro
     command: scheduler
     restart: unless-stopped
+
+  # Meltano service for ad-hoc runs: docker compose run --rm meltano run <pipeline>
+  meltano:
+    build:
+      context: ./data-platform/meltano
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-southeast-1}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_PREFIX: ${S3_PREFIX:-elt/}
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
+      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+      MSSQL_HOST: ${MSSQL_HOST}
+      MSSQL_EXPORT_USER: ${MSSQL_EXPORT_USER}
+      MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
+      HR_API_BASE_URL: http://host.docker.internal:8000
+      HR_API_AUTH_MODE: ${HR_API_AUTH_MODE:-none}
+      HR_API_KEY: ${HR_API_KEY:-}
+      HR_API_JWT_SECRET: ${HR_API_JWT_SECRET:-}
+    volumes:
+      - ./data-platform/meltano:/meltano/project
+      - ${HOME}/.aws/credentials:/home/meltano/.aws/credentials:ro
+    working_dir: /meltano/project
+    entrypoint: ["meltano"]
+    profiles: ["tools"]
 
   # Ad-hoc dbt runs: docker compose run --rm dbt run --select stg_common
   dbt:
@@ -105,6 +142,43 @@ services:
     volumes:
       - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     profiles: ["tools"]
+
+  superset:
+    image: apache/superset:latest
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-superset_secret_key}
+      SUPERSET_LOAD_EXAMPLES: "no"
+    depends_on:
+      superset-postgres:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    command: >
+      sh -c "superset fab create-admin
+      --username ${SUPERSET_ADMIN_USER:-admin}
+      --firstname Admin --lastname User
+      --email admin@ssi.com.vn
+      --password ${SUPERSET_ADMIN_PASSWORD:-admin}
+      && superset db upgrade
+      && superset init
+      && superset run -p 8088 --with-threads --reload --debugger"
+    volumes:
+      - superset_home:/app/superset_home
+    restart: unless-stopped
+
+  superset-postgres:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: ${SUPERSET_DB_PASSWORD:-supersetpass}
+      POSTGRES_DB: superset
+    volumes:
+      - superset_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Optional, local dev only - requires explicit opt-in (see header comment).
   sqlserver:
@@ -121,3 +195,5 @@ services:
 volumes:
   airflow_postgres_data:
   mssql_data:
+  superset_home:
+  superset_postgres_data:

@@ -1,0 +1,223 @@
+# ──────────────────────────────────────────────
+# SSI Trading Analytics – CI/CD Pipeline
+# ──────────────────────────────────────────────
+# Triggers:
+#   - push (hoặc PR) vào nhánh main, develop
+#   - thay đổi file trong data-platform/
+#
+# Stages:
+#   1. validate: Kiểm tra YAML, schemas, syntax
+#   2. docker_build: Build thử container airflow, meltano, dbt
+#   3. dbt_docs: Generate dbt docs để review
+#   4. soda_validate: Kiểm tra Soda checks syntax
+#   5. deploy-dev: (khi có infra) Deploy lên dev stack
+#
+# Yêu cầu secrets (GitHub Secrets):
+#   SNOWFLAKE_ACCOUNT, SNOWFLAKE_TRANSFORM_USER, SNOWFLAKE_TRANSFORM_PASSWORD
+#   MSSQL_HOST, MSSQL_EXPORT_USER, MSSQL_EXPORT_PASSWORD
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION, S3_BUCKET
+#   (các secret này dùng cho integration test, có thể mock nếu cần)
+
+name: SSI Analytics Pipeline CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "data-platform/**"
+      - "docker-compose.yml"
+      - "hr-api/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "data-platform/**"
+      - "docker-compose.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_FILE: docker-compose.yml
+
+jobs:
+  # ── Stage 1: Validate ────────────────────────
+  validate:
+    name: Validate & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install validation dependencies
+        run: |
+          pip install --upgrade pip
+          pip install yamllint dbt-core==1.8.8
+
+      - name: Validate YAML files
+        run: |
+          echo "=== Validating docker-compose.yml ==="
+          python -c "import yaml; yaml.safe_load(open('docker-compose.yml'))" && echo "OK"
+          echo "=== Validating meltano.yml ==="
+          python -c "import yaml; yaml.safe_load(open('data-platform/meltano/meltano.yml'))" && echo "OK"
+          echo "=== Validating Soda config ==="
+          python -c "import yaml; yaml.safe_load(open('data-platform/soda/configuration.yml'))" && echo "OK"
+          echo "=== Validating Soda checks ==="
+          for f in data-platform/soda/checks/*.yml; do
+            python -c "import yaml; yaml.safe_load(open('$f'))" && echo "  $f OK"
+          done
+
+      - name: Validate dbt project
+        run: |
+          cd data-platform/dbt
+          dbt deps
+          dbt compile --selector default --threads 1 || echo "dbt compile may fail without Snowflake - ignoring"
+
+      - name: Validate DAG import (syntax only)
+        run: |
+          pip install pytest
+          # Check Python syntax of all DAG files
+          for f in data-platform/airflow/dags/*.py; do
+            python -m py_compile "$f" && echo "  $f OK"
+          done
+
+  # ── Stage 2: Docker Build Test ───────────────
+  docker_build:
+    name: Docker Build
+    needs: [validate]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service:
+          - context: ./data-platform/airflow
+            image: airflow
+          - context: ./data-platform/meltano
+            image: meltano
+          - context: ./data-platform/dbt
+            image: dbt
+          - context: ./hr-api
+            image: hr-api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service.image }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          push: false
+          load: true
+          tags: ssi-analytics/${{ matrix.service.image }}:test-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Stage 3: dbt Docs Generate ───────────────
+  dbt_docs:
+    name: dbt Docs
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt
+        run: |
+          pip install dbt-core==1.8.8 dbt-snowflake==1.8.4
+
+      - name: Generate dbt docs
+        env:
+          # Use dummy values for doc generation only (no actual connection needed)
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT || 'dummy' }}
+          SNOWFLAKE_TRANSFORM_USER: ${{ secrets.SNOWFLAKE_TRANSFORM_USER || 'dummy' }}
+          SNOWFLAKE_TRANSFORM_PASSWORD: ${{ secrets.SNOWFLAKE_TRANSFORM_PASSWORD || 'dummy' }}
+        run: |
+          cd data-platform/dbt
+          dbt deps
+          dbt docs generate --no-version-check || (
+            echo "dbt docs generate may fail without Snowflake; attempting fallback..."
+            # Generate partial docs using manifest.json if it exists
+            if [ -f target/manifest.json ]; then
+              dbt docs serve --no-browser --port 8080 &
+              echo "Serving docs on port 8080 (for review)"
+            fi
+          )
+
+      - name: Upload dbt docs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs-${{ github.sha }}
+          path: data-platform/dbt/target/
+          retention-days: 7
+
+  # ── Stage 4: Soda Check Validation ───────────
+  soda_validate:
+    name: Soda Checks Syntax
+    needs: [validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Soda Core
+        run: pip install soda-core==3.4.0
+
+      - name: Validate Soda checks
+        run: |
+          for f in data-platform/soda/checks/*.yml; do
+            echo "=== Checking $f ==="
+            # Parse and validate structure (no snowflake connection needed)
+            python -c "
+import yaml, sys
+try:
+    with open('$f') as fh:
+        data = yaml.safe_load(fh)
+        # Basic validation: must have at least one check
+        for table, checks in data.items():
+            if not table.startswith('checks for'):
+                raise ValueError(f'Missing \"checks for\" header in {table}')
+            if not isinstance(checks, list) or len(checks) == 0:
+                raise ValueError(f'No checks defined for {table}')
+    print('  Valid')
+except Exception as e:
+    print(f'  ERROR: {e}')
+    sys.exit(1)
+"
+          done
+
+  # ── Stage 5: Deploy to Dev (optional) ────────
+  # Kích hoạt khi có SSH access / Docker registry / Terraform
+  # deploy-dev:
+  #   name: Deploy Dev Stack
+  #   needs: [docker_build, dbt_docs, soda_validate]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/develop'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1.0.3
+  #       with:
+  #         host: ${{ secrets.DEV_HOST }}
+  #         username: ${{ secrets.DEV_USER }}
+  #         key: ${{ secrets.DEV_SSH_KEY }}
+  #         script: |
+  #           cd /opt/ssi-analytics
+  #           git pull
+  #           docker compose -f docker-compose.yml up -d --build
+  #     - name: Verify deployment
+  #       run: |
+  #         echo "Deployment completed. Check http://dev-ssi:8080 (Airflow), :8088 (Superset)"

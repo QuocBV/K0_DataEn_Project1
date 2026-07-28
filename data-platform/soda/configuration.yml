@@ -1,0 +1,11 @@
+# Soda Core configuration file.
+# Connects to Snowflake ANALYTICS database (Gold layer).
+data_source snowflake_ssi:
+  type: snowflake
+  account: ${SNOWFLAKE_ACCOUNT}
+  username: ${SNOWFLAKE_TRANSFORM_USER}
+  password: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+  database: ANALYTICS
+  schema: MARTS  # Default schema for checks
+  warehouse: TRANSFORM_WH
+  role: TRANSFORM_ROLE
