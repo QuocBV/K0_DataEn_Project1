@@ -60,17 +60,7 @@ jobs:
           pip install yamllint dbt-core==1.8.8
 
       - name: Validate YAML files
-        run: |
-          echo "=== Validating docker-compose.yml ==="
-          python -c "import yaml; yaml.safe_load(open('docker-compose.yml'))" && echo "OK"
-          echo "=== Validating meltano.yml ==="
-          python -c "import yaml; yaml.safe_load(open('data-platform/meltano/meltano.yml'))" && echo "OK"
-          echo "=== Validating Soda config ==="
-          python -c "import yaml; yaml.safe_load(open('data-platform/soda/configuration.yml'))" && echo "OK"
-          echo "=== Validating Soda checks ==="
-          for f in data-platform/soda/checks/*.yml; do
-            python -c "import yaml; yaml.safe_load(open('$f'))" && echo "  $f OK"
-          done
+        run: python data-platform/scripts/ci_validate_yaml.py
 
       - name: Validate dbt project
         run: |
@@ -81,7 +71,6 @@ jobs:
       - name: Validate DAG import (syntax only)
         run: |
           pip install pytest
-          # Check Python syntax of all DAG files
           for f in data-platform/airflow/dags/*.py; do
             python -m py_compile "$f" && echo "  $f OK"
           done
@@ -137,7 +126,6 @@ jobs:
 
       - name: Generate dbt docs
         env:
-          # Use dummy values for doc generation only (no actual connection needed)
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT || 'dummy' }}
           SNOWFLAKE_TRANSFORM_USER: ${{ secrets.SNOWFLAKE_TRANSFORM_USER || 'dummy' }}
           SNOWFLAKE_TRANSFORM_PASSWORD: ${{ secrets.SNOWFLAKE_TRANSFORM_PASSWORD || 'dummy' }}
@@ -146,7 +134,6 @@ jobs:
           dbt deps
           dbt docs generate --no-version-check || (
             echo "dbt docs generate may fail without Snowflake; attempting fallback..."
-            # Generate partial docs using manifest.json if it exists
             if [ -f target/manifest.json ]; then
               dbt docs serve --no-browser --port 8080 &
               echo "Serving docs on port 8080 (for review)"
@@ -177,47 +164,27 @@ jobs:
         run: pip install soda-core==3.4.0
 
       - name: Validate Soda checks
-        run: |
-          for f in data-platform/soda/checks/*.yml; do
-            echo "=== Checking $f ==="
-            # Parse and validate structure (no snowflake connection needed)
-            python -c "
-import yaml, sys
-try:
-    with open('$f') as fh:
-        data = yaml.safe_load(fh)
-        # Basic validation: must have at least one check
-        for table, checks in data.items():
-            if not table.startswith('checks for'):
-                raise ValueError(f'Missing \"checks for\" header in {table}')
-            if not isinstance(checks, list) or len(checks) == 0:
-                raise ValueError(f'No checks defined for {table}')
-    print('  Valid')
-except Exception as e:
-    print(f'  ERROR: {e}')
-    sys.exit(1)
-"
-          done
+        run: python data-platform/scripts/ci_validate_soda_checks.py
 
-  # ── Stage 5: Deploy to Dev (optional) ────────
-  # Kích hoạt khi có SSH access / Docker registry / Terraform
-  # deploy-dev:
-  #   name: Deploy Dev Stack
-  #   needs: [docker_build, dbt_docs, soda_validate]
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/develop'
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Deploy via SSH
-  #       uses: appleboy/ssh-action@v1.0.3
-  #       with:
-  #         host: ${{ secrets.DEV_HOST }}
-  #         username: ${{ secrets.DEV_USER }}
-  #         key: ${{ secrets.DEV_SSH_KEY }}
-  #         script: |
-  #           cd /opt/ssi-analytics
-  #           git pull
-  #           docker compose -f docker-compose.yml up -d --build
-  #     - name: Verify deployment
-  #       run: |
-  #         echo "Deployment completed. Check http://dev-ssi:8080 (Airflow), :8088 (Superset)"
+  # ── Stage 5: Deploy to Dev ───────────────────
+  deploy-dev:
+    name: Deploy Dev Stack
+    needs: [docker_build, dbt_docs, soda_validate]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            cd /opt/ssi-analytics
+            git pull
+            docker compose -f docker-compose.yml up -d --build
+            docker compose restart airflow-scheduler
+      - name: Verify deployment
+        run: |
+          echo "Deployment completed. Check http://dev-ssi:8080 (Airflow), :8088 (Superset)"

@@ -1,0 +1,353 @@
+================================================================================
+  SSI TRADING ANALYTICS - DATA PLATFORM v2.0
+  PROJECT NOTES & DEBUGGING GUIDE
+================================================================================
+                      
+  >>> ĐÂY LÀ BÀI LAB - ƯU TIÊN TRIỂN KHAI TRÊN LOCAL <<<
+  >>>         SỬ DỤNG DOCKER DESKTOP              <<<
+
+================================================================================
+1. TỔNG QUAN KIẾN TRÚC
+================================================================================
+
+  Hệ thống Data Engineering phục vụ phân tích giao dịch chứng khoán.
+  Dữ liệu từ 4 database SQL Server (nghiệp vụ) + HR API được đưa qua pipeline
+  ELT để tạo báo cáo trên BI.
+
+  Luồng dữ liệu tổng thể (local lab):
+    SQL Server (Docker)          ← Chạy local với profile sqlserver
+    HR API (Docker)              ← FastAPI mock
+        │
+        ▼
+    Meltano (Docker) → S3 (local mock hoặc thật)
+        │
+        ▼
+    Snowflake (cloud service)
+        │
+        ▼
+    dbt Core (Docker) → Snowflake
+        │
+        ▼
+    Soda Core (Docker) → Snowflake
+        │
+        ▼
+    Apache Superset (Docker) → Browser http://localhost:8088
+
+  Điều phối: Apache Airflow (Docker) → http://localhost:8080
+
+
+2. CÔNG NGHỆ SỬ DỤNG
+================================================================================
+
+  Công nghệ         | Version  | Vai trò               | Local?
+  ------------------|----------|-----------------------|--------
+  Apache Airflow    | 2.10.2   | Orchestrator          | ✅ Docker
+  Python            | 3.12     | Ngôn ngữ chính        | ✅
+  Snowflake         | -        | Data Warehouse        | ⚠️ Cần tài khoản cloud
+  dbt Core          | 1.8.8    | Transform             | ✅ Docker
+  Meltano           | -        | EL pipeline           | ✅ Docker
+  Soda Core         | 3.4.0    | Data Quality          | ✅ Docker
+  Apache Superset   | latest   | BI Dashboard          | ✅ Docker
+  AWS S3            | -        | Data Lake             | ⚠️ Cần tài khoản cloud
+  Docker Desktop    | -        | Containerization      | ✅ Trên máy bạn
+  GitHub Actions    | -        | CI/CD                 | ⚠️ Có thể bỏ qua lab
+  Cosmos (Astronomer)| 1.9.0   | dbt + Airflow         | ✅ Docker
+
+  *Lưu ý: Đây là bài lab nên có thể dùng tài khoản Snowflake free trial +
+   AWS free tier. Nếu không có S3, có thể dùng MinIO (S3-compatible local).*
+
+
+3. CẤU TRÚC THƯ MỤC
+================================================================================
+
+  Project_De/
+  ├── docker-compose.yml              # Định nghĩa 10 services (cốt lõi của lab)
+  ├── .env.example                    # Mẫu biến môi trường → copy thành .env
+  ├── README.md                       # Tổng quan dự án
+  ├── SETUP.md                        # Hướng dẫn cài đặt (đọc kỹ trước khi chạy)
+  |
+  ├── Database/                       # SQL Server: 4 database nguồn (chạy local)
+  │   ├── 00_create_databases.sql     # Tạo 4 DB
+  │   ├── DATA_MODEL.md              # Chi tiết schema các bảng
+  │   ├── Common/                    # Bảng dùng chung
+  │   ├── Equity/                    # Giao dịch chứng khoán cơ sở
+  │   ├── Derivatives/               # Giao dịch phái sinh
+  │   └── OEF/                       # Chứng chỉ quỹ mở
+  |
+  ├── hr-api/                        # Mock HR REST API (FastAPI) - chạy local
+  │   ├── main.py                    # API employees, manager-chain
+  │   └── Dockerfile
+  |
+  ├── data-platform/
+  │   ├── airflow/
+  │   │   ├── Dockerfile             # Airflow image
+  │   │   ├── requirements.txt       # Python dependencies
+  │   │   └── dags/
+  │   │       ├── _common.py         # Shared helpers
+  │   │       ├── meltano_extract.py # DAG 1: Extract -> S3 -> Snowflake
+  │   │       ├── dbt_transform.py   # DAG 2: dbt transform
+  │   │       ├── soda_checks.py     # DAG 3: Soda quality checks
+  │   │       └── generate_trading_data.py # DAG 4: Tự sinh giao dịch mẫu
+  │   │
+  │   ├── meltano/                   # Meltano EL config
+  │   │   ├── meltano.yml
+  │   │   └── extractors/tap_hr_api/
+  │   │
+  │   ├── dbt/                       # dbt project
+  │   │   ├── dbt_project.yml
+  │   │   ├── profiles.yml.example   # Copy -> profiles.yml, điền Snowflake info
+  │   │   ├── models/
+  │   │   │   ├── staging/           # Bronze → Silver
+  │   │   │   └── marts/             # Silver → Gold (dim + fact + 13 reports)
+  │   │   └── snapshots/             # SCD2 snapshot
+  │   │
+  │   ├── soda/                      # Data Quality
+  │   │   ├── configuration.yml
+  │   │   └── checks/gold_marts_checks.yml
+  │   │
+  │   ├── superset/
+  │   │   └── superset_config.py     # BI config
+  │   │
+  │   └── scripts/
+  │       ├── ci_validate_yaml.py
+  │       └── ci_validate_soda_checks.py
+  │
+  └── .github/workflows/
+      └── pipeline_ci.yml            # CI/CD (có thể bỏ qua khi lab local)
+
+
+4. CÁCH CHẠY TOÀN BỘ HỆ THỐNG LOCAL (DOCKER DESKTOP)
+================================================================================
+
+  BƯỚC 1: Copy .env và điền thông tin
+  ────────────────────────────────────────────────────────────────────────
+  cp .env.example .env
+  # Mở .env và điền:
+  #   - SNOWFLAKE_ACCOUNT, SNOWFLAKE_TRANSFORM_USER/PASSWORD (quan trọng)
+  #   - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_BUCKET (nếu dùng S3 thật)
+  #   - MSSQL_HOST = sqlserver,1433 (khi chạy SQL Server qua Docker Compose)
+  #   - MSSQL_SA_PASSWORD (password cho SQL Server local)
+
+  BƯỚC 2: Khởi động SQL Server local (nếu cần)
+  ────────────────────────────────────────────────────────────────────────
+  docker compose --profile sqlserver up -d sqlserver
+  # Chạy các script .sql trong Database/ để tạo schema + seed data
+  # Dùng sqlcmd hoặc SSMS kết nối localhost,1433
+
+  BƯỚC 3: Khởi động toàn bộ stack
+  ────────────────────────────────────────────────────────────────────────
+  docker compose up -d
+  # Services được khởi động:
+  #   hr-api         → http://localhost:8000
+  #   airflow        → http://localhost:8080
+  #   superset       → http://localhost:8088
+
+  BƯỚC 4: Kiểm tra
+  ────────────────────────────────────────────────────────────────────────
+  docker compose ps                        # Xem tất cả containers đang chạy
+  docker compose logs airflow-scheduler    # Xem log scheduler
+
+  BƯỚC 5: Chạy thủ công (nếu không có Snowflake/S3 thật)
+  ────────────────────────────────────────────────────────────────────────
+  Dùng DAG generate_trading_data để tự sinh dữ liệu mẫu:
+  Airflow UI → DAG: generate_trading_data → Trigger DAG
+  (DAG này insert trực tiếp vào Snowflake RAW tables)
+
+
+5. 4 DAGs AIRFLOW - LUỒNG CHI TIẾT
+================================================================================
+
+  5.1 DAG: generate_trading_data (ƯU TIÊN CHO LAB - chạy trước)
+  ────────────────────────────────────────────────────────────────────────
+  Schedule: @daily (hoặc Trigger thủ công)
+  File: data-platform/airflow/dags/generate_trading_data.py
+
+  ❗ DAG này quan trọng nhất cho LAB vì nó tự sinh dữ liệu để test.
+
+  Luồng:
+    generate_trades (sinh 50 Equity + 20 Derivatives + 15 OEF trades)
+        │
+        ▼
+    verify_generated_data (kiểm tra số lượng)
+        │
+        ▼
+    mark_generation_complete
+
+  Công nghệ: SnowflakeHook, PythonOperator
+  Debug: Airflow connection "snowflake_default" phải được cấu hình trước
+
+  5.2 DAG: meltano_extract (cần S3 + Snowflake thật)
+  ────────────────────────────────────────────────────────────────────────
+  Schedule: 0 2 * * *
+  File: data-platform/airflow/dags/meltano_extract.py
+
+  Luồng:
+    5 extracts parallel (common, equity, derivatives, oef, hr)
+        → verify S3
+        → load S3 → Snowflake
+        → emit EXTRACT_DONE Dataset
+
+  Debug:
+    - Lỗi "no files in S3": check AWS keys
+    - Chạy thủ công: docker compose run --rm meltano run <pipeline>
+
+  5.3 DAG: dbt_transform (cần Snowflake)
+  ────────────────────────────────────────────────────────────────────────
+  Schedule: dataset EXTRACT_DONE
+  File: data-platform/airflow/dags/dbt_transform.py
+
+  Luồng bắt buộc:
+    staging → marts_base → snapshot → dim_customer_history → reports → tests
+
+  Debug:
+    - docker compose run --rm dbt run --select stg_common
+    - docker compose run --rm dbt test
+    - Xem dbt docs: dbt docs generate && dbt docs serve
+
+  5.4 DAG: soda_checks (cần Snowflake)
+  ────────────────────────────────────────────────────────────────────────
+  Schedule: dataset TRANSFORM_DONE
+  File: data-platform/airflow/dags/soda_checks.py
+
+  Chạy 45+ quality checks trên Gold layer.
+  Debug: docker compose run --rm soda scan -d snowflake_ssi -c ...
+
+
+6. DATA WAREHOUSE - 3 LAYER SNOWFLAKE
+================================================================================
+
+  Database: ANALYTICS (cần tạo trên Snowflake trước)
+
+  Layer     | Schema   | Mô tả
+  ----------|----------|----------------------------------------------
+  Bronze    | RAW      | Dữ liệu thô dạng VARIANT (từ S3 hoặc generate)
+  Silver    | STG_*    | Đã flatten + dedup + clean
+  Gold      | MARTS    | Star Schema: dim + fact + 13 reports
+
+  Transform flow:
+    RAW.*_raw (VARIANT)
+      → stg_*__* (flatten, dedup by source_system + source_trade_id)
+      → dim_* / fact_* (Star Schema, incremental)
+      → reports (rpt_* views - 13 báo cáo)
+      → soda checks (quality gate)
+
+
+7. FOREIGN KEY MAP
+================================================================================
+
+  fact_equity_trade:
+    customer_code → dim_customer.customer_code
+    broker_code   → dim_broker.broker_code
+    security_id   → dim_security.security_id
+    trade_id      = ID định danh giao dịch
+
+  fact_derivative_trade:
+    customer_code → dim_customer.customer_code
+    broker_code   → dim_broker.broker_code
+    contract_id   → dim_derivative_contract.contract_id (hợp đồng phái sinh)
+    trade_id      = ID định danh giao dịch
+
+  fact_oef_trade:
+    customer_code → dim_customer.customer_code
+    broker_code   → dim_broker.broker_code
+    fund_id       → dim_fund.fund_id
+    trade_id      = ID định danh giao dịch
+
+
+8. DATA QUALITY CHECKS (Soda)
+================================================================================
+
+  File: data-platform/soda/checks/gold_marts_checks.yml
+  Tổng cộng: 45+ checks các loại
+
+  Loại check           | Ví dụ
+  ---------------------|----------------------------------------------
+  row_count > 0        | Kiểm tra bảng có dữ liệu
+  duplicate_count = 0  | Không có duplicate
+  missing_count = 0    | Không có null
+  freshness < 1d       | Dữ liệu không quá cũ
+  values not < 0       | Giá trị không âm (commission, aum, margin)
+  anomaly_detection    | Phát hiện bất thường row_count so với 7 ngày
+
+
+9. DEBUG VỚI DOCKER DESKTOP
+================================================================================
+
+  # Kiểm tra tất cả containers
+  docker compose ps
+  docker compose logs -f                        # Log real-time
+
+  # Log từng service
+  docker compose logs airflow-webserver
+  docker compose logs airflow-scheduler
+  docker compose logs airflow-init              # Lần đầu khởi động
+  docker compose logs superset
+  docker compose logs hr-api
+
+  # Chạy lệnh trong container
+  docker compose exec airflow-webserver airflow dags list
+  docker compose exec airflow-webserver airflow tasks list meltano_extract
+
+  # Chạy dbt thủ công (ad-hoc)
+  docker compose run --rm dbt run --select stg_common
+
+  # Chạy meltano thủ công
+  docker compose run --rm meltano run tap-mssql-common target-s3
+
+  # Chạy Soda thủ công
+  docker compose run --rm soda scan -d snowflake_ssi \
+    -c data-platform/soda/configuration.yml \
+    checks/gold_marts_checks.yml
+
+  # Validate Python syntax
+  python -m py_compile data-platform/airflow/dags/generate_trading_data.py
+
+  # Validate YAML
+  python data-platform/scripts/ci_validate_yaml.py
+
+  # Kiểm tra kết nối Snowflake từ Airflow
+  docker compose exec airflow-webserver airflow connections get snowflake_default
+
+  # Restart specific service
+  docker compose restart airflow-scheduler
+
+  # Xem logs và debug container bị lỗi
+  docker compose logs --tail=50 airflow-init
+
+
+10. CÁC VẤN ĐỀ THƯỜNG GẶP KHI LAB LOCAL
+================================================================================
+
+  Vấn đề                        | Nguyên nhân / Cách fix
+  -------------------------------|---------------------------------------------
+  Container không start được    | docker compose logs <service> để xem lỗi
+  Airflow login fail             | Check AIRFLOW_ADMIN_USER/PASSWORD trong .env
+  DAG không xuất hiện trong UI   | Check folder mount: dags/ trong docker-compose.yml
+  dbt lỗi "profile not found"    | Copy profiles.yml.example → profiles.yml
+  Snowflake connection fail      | Check SNOWFLAKE_ACCOUNT, USER, PASSWORD
+  S3 upload fail                 | Check AWS_ACCESS_KEY_ID, SECRET_ACCESS_KEY
+  SQL Server không connect       | MSSQL_HOST = sqlserver,1433 (Docker network)
+  superset không start           | Check SUPERSET_DB_PASSWORD, đợi superset-postgres
+  "table not found" trong dbt    | Chạy dbt staging models trước
+  Soda check fail                | Xem log cụ thể check nào fail
+  generate_trading_data fail     | Chạy dbt staging + marts_base trước
+
+
+11. CÁC FILE ĐÃ THAY ĐỔI / THÊM MỚI
+================================================================================
+
+  File thay đổi:
+    - data-platform/airflow/requirements.txt       # Pin versions
+    - data-platform/soda/checks/gold_marts_checks.yml  # Mở rộng 45+ checks
+    - .github/workflows/pipeline_ci.yml            # Uncomment deploy-dev
+    - data-platform/dbt/models/marts/_marts__schema.yml
+    - data-platform/dbt/models/staging/equity/stg_equity__equity_trade.sql
+    - data-platform/dbt/models/staging/oef/stg_oef__oef_trade.sql
+    - data-platform/dbt/models/marts/fact/fact_equity_trade.sql
+    - data-platform/dbt/models/marts/fact/fact_oef_trade.sql
+
+  File mới:
+    - data-platform/scripts/ci_validate_yaml.py
+    - data-platform/scripts/ci_validate_soda_checks.py
+    - data-platform/airflow/dags/generate_trading_data.py
+    - PROJECT_NOTES.txt (file này)

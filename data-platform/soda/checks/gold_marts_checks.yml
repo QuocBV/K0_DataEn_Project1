@@ -5,21 +5,25 @@ checks for dim_broker:
   - row_count > 0
   - duplicate_count(broker_code) = 0
   - missing_count(broker_code) = 0
+  - freshness(ingested_at) < 1d
 
 checks for dim_customer:
   - row_count > 0
   - duplicate_count(customer_code) = 0
   - missing_count(customer_code) = 0
   - missing_count(customer_type) = 0
+  - freshness(ingested_at) < 1d
 
 checks for dim_account:
   - row_count > 0
   - duplicate_count(account_id) = 0
   - missing_count(account_id) = 0
+  - freshness(ingested_at) < 1d
 
 checks for dim_security:
   - row_count > 0
   - duplicate_count(security_id) = 0
+  - freshness(ingested_at) < 1d
 
 checks for fact_equity_trade:
   - row_count > 0
@@ -27,28 +31,101 @@ checks for fact_equity_trade:
   - missing_count(quantity) = 0
   - missing_count(amount) = 0
   - duplicate_count(trade_id) = 0
+  - freshness(ingested_at) < 1d
+  - anomaly_detection for row_count:
+      looked_back_n_days: 7
+      sensitivity: 0.7
 
 checks for fact_derivative_trade:
   - row_count > 0
   - missing_count(trade_id) = 0
   - duplicate_count(trade_id) = 0
+  - freshness(ingested_at) < 1d
+  - anomaly_detection for row_count:
+      looked_back_n_days: 7
+      sensitivity: 0.7
 
 checks for fact_oef_trade:
   - row_count > 0
   - missing_count(trade_id) = 0
   - duplicate_count(trade_id) = 0
+  - freshness(ingested_at) < 1d
+  - anomaly_detection for row_count:
+      looked_back_n_days: 7
+      sensitivity: 0.7
 
 # Report checks (views)
 checks for rpt_broker_commission_revenue:
   - row_count > 0
   - missing_count(broker_code) = 0
   - values in (total_commission) must not be < 0
+  - freshness(ingested_at) < 2d
 
 checks for rpt_aum_summary:
   - row_count > 0
   - missing_count(customer_code) = 0
   - values in (aum_amount) must not be < 0
+  - freshness(ingested_at) < 2d
 
 checks for rpt_margin_call_alert:
   - row_count > 0
   - missing_count(account_id) = 0
+  - values in (margin_ratio) must not be < 0
+
+# New checks for data quality
+
+checks for dim_branch:
+  - row_count > 0
+  - duplicate_count(branch_id) = 0
+  - missing_count(branch_code) = 0
+
+checks for dim_department:
+  - row_count > 0
+  - duplicate_count(department_id) = 0
+  - missing_count(department_code) = 0
+
+checks for dim_derivative_contract:
+  - row_count > 0
+  - duplicate_count(contract_id) = 0
+  - missing_count(contract_code) = 0
+
+checks for dim_fund:
+  - row_count > 0
+  - duplicate_count(fund_id) = 0
+  - missing_count(fund_code) = 0
+
+checks for dim_date:
+  - row_count > 0
+  - duplicate_count(date_key) = 0
+
+checks for rpt_trading_activity_summary:
+  - row_count > 0
+  - missing_count(trade_date) = 0
+
+checks for rpt_customer_acquisition_funnel:
+  - row_count > 0
+  - missing_count(customer_code) = 0
+
+checks for rpt_customer_dormant:
+  - row_count > 0
+  - missing_count(customer_code) = 0
+
+checks for rpt_position_concentration_risk:
+  - row_count > 0
+  - missing_count(account_id) = 0
+
+checks for rpt_oef_fund_flow:
+  - row_count > 0
+  - missing_count(fund_code) = 0
+
+checks for rpt_customer_investment_performance:
+  - row_count > 0
+  - missing_count(customer_code) = 0
+
+checks for rpt_customer_cross_sell:
+  - row_count > 0
+  - missing_count(customer_code) = 0
+
+checks for rpt_management_override_commission:
+  - row_count > 0
+  - missing_count(broker_code) = 0
