@@ -12,15 +12,15 @@ from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from _common import DEFAULT_ARGS
 
 # Define Datasets for each stage
-DS_TRADES_GENERATED = Dataset("s3://company-data/silver/_TRADES_GENERATED")
-DS_RAW_INGESTED = Dataset("s3://company-data/raw/_SUCCESS")
-DS_BRONZE_COMPLETE = Dataset("s3://company-data/bronze/_SUCCESS")
-DS_BRONZE_CHECKED = Dataset("s3://company-data/bronze/_QUALITY_CHECKED")
-DS_SILVER_COMPLETE = Dataset("s3://company-data/silver/_SUCCESS")
-DS_SILVER_CHECKED = Dataset("s3://company-data/silver/_QUALITY_CHECKED")
-DS_GOLD_DBT_COMPLETE = Dataset("s3://company-data/gold/_DBT_COMPLETE")
-DS_GOLD_CHECKED = Dataset("s3://company-data/gold/_QUALITY_CHECKED")
-DS_COMMISSION_COMPLETE = Dataset("s3://company-report/_SUCCESS")
+DS_TRADES_GENERATED = Dataset("s3://ssi-data/silver/_TRADES_GENERATED")
+DS_RAW_INGESTED = Dataset("s3://ssi-data/raw/_SUCCESS")
+DS_BRONZE_COMPLETE = Dataset("s3://ssi-data/bronze/_SUCCESS")
+DS_BRONZE_CHECKED = Dataset("s3://ssi-data/bronze/_QUALITY_CHECKED")
+DS_SILVER_COMPLETE = Dataset("s3://ssi-data/silver/_SUCCESS")
+DS_SILVER_CHECKED = Dataset("s3://ssi-data/silver/_QUALITY_CHECKED")
+DS_GOLD_DBT_COMPLETE = Dataset("s3://ssi-data/gold/_DBT_COMPLETE")
+DS_GOLD_CHECKED = Dataset("s3://ssi-data/gold/_QUALITY_CHECKED")
+DS_COMMISSION_COMPLETE = Dataset("s3://ssi-report/_SUCCESS")
 
 with DAG(
     dag_id="main_pipeline",

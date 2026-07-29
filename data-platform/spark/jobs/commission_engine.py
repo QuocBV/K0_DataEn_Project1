@@ -16,8 +16,8 @@ from pyspark.sql.functions import (
 from pyspark.sql.window import Window
 from functools import reduce
 
-GOLD_BUCKET = "s3a://company-data/gold"
-REPORT_BUCKET = "s3a://company-report"
+GOLD_BUCKET = "s3a://ssi-data/gold"
+REPORT_BUCKET = "s3a://ssi-report"
 REPORT_DB = "reporting"
 
 
