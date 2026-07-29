@@ -30,3 +30,15 @@ DEFAULT_ARGS = {
     "on_failure_callback": notify_failure,
     "execution_timeout": timedelta(hours=2),
 }
+
+# Airbyte connection IDs - User must set these in Airflow Variables (Admin > Variables)
+# Variable name: airbyte_connection_ids
+# Value: JSON object mapping resource names to Airbyte connection UUIDs
+# Example:
+# {
+#   "mssql_common_to_s3": "abc-123",
+#   "mssql_equity_to_s3": "def-456",
+#   "mssql_derivatives_to_s3": "ghi-789",
+#   "mssql_oef_to_s3": "jkl-012",
+#   "hr_api_to_s3": "mno-345"
+# }

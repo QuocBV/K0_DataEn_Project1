@@ -1,0 +1,37 @@
+==================== 2026-07-29T14:14:03.005630Z | 00000000-0000-0000-0000-000000000000 ====================
+==================== 2026-07-29T14:14:03.006810Z | 9dc358bc-3fbf-48ac-9759-127f8d8cdac9 ====================
+14:14:03.007003 [info ]: Starting dbt LSP server
+14:14:03.007474 [info ]: Connecting to LSP client on port 8000
+14:14:03.017277 [info ]: Successfully connected to LSP client
+14:14:03.017331 [info ]: Creating LSP service...
+14:14:03.020643 [info ]: Creating LSP server...
+14:14:03.020668 [info ]: Starting LSP server...
+14:14:03.499663 [info ]: Loading ~/.dbt/profiles.yml
+14:14:13.928211 [info ]: Loading ~/.dbt/profiles.yml
+14:14:19.605924 [info ]: Started loading project
+14:14:19.609020 [info ]: Loading ~/.dbt/profiles.yml
+14:14:19.610661 [info ]: Finished loading project [  0.00s]
+14:14:25.743710 [info ]: Loading ~/.dbt/profiles.yml
+14:14:31.076604 [info ]: Loading ~/.dbt/profiles.yml
+14:17:22.625949 [info ]: Loading ~/.dbt/profiles.yml
+14:17:40.739893 [info ]: Loading ~/.dbt/profiles.yml
+14:17:46.089367 [info ]: Loading ~/.dbt/profiles.yml
+14:18:00.477523 [info ]: Loading ~/.dbt/profiles.yml
+14:18:47.338357 [info ]: Loading ~/.dbt/profiles.yml
+14:19:15.836160 [info ]: Loading ~/.dbt/profiles.yml
+14:19:16.069357 [info ]: Loading ~/.dbt/profiles.yml
+14:19:42.782055 [info ]: Loading ~/.dbt/profiles.yml
+14:19:44.422037 [info ]: Loading ~/.dbt/profiles.yml
+14:22:45.540320 [info ]: Loading ~/.dbt/profiles.yml
+14:22:48.021027 [info ]: Loading ~/.dbt/profiles.yml
+14:22:51.767320 [info ]: Loading ~/.dbt/profiles.yml
+14:23:00.403346 [info ]: Loading ~/.dbt/profiles.yml
+14:23:01.802645 [info ]: Loading ~/.dbt/profiles.yml
+14:23:04.984316 [info ]: Loading ~/.dbt/profiles.yml
+14:27:10.458745 [info ]: Loading ~/.dbt/profiles.yml
+14:27:11.949379 [info ]: Loading ~/.dbt/profiles.yml
+14:28:07.059631 [info ]: Loading ~/.dbt/profiles.yml
+14:28:13.612360 [info ]: Loading ~/.dbt/profiles.yml
+14:28:14.449875 [info ]: Loading ~/.dbt/profiles.yml
+14:29:47.512081 [info ]: Loading ~/.dbt/profiles.yml
+14:29:47.777313 [info ]: Loading ~/.dbt/profiles.yml

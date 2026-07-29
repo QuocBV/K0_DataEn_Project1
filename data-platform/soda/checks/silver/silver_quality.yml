@@ -1,0 +1,45 @@
+# Silver Data Quality Checks - Soda
+# Runs after Silver ETL (Spark) to validate cleaned/enriched Iceberg tables
+
+checks for silver.silver.broker:
+  - duplicate_count("broker_code") = 0
+  - missing_count("broker_code") = 0
+  - missing_count("broker_name") = 0:
+      warn: when > 0
+  - values in ("broker_type") must be in ("BROKER", "COLLABORATOR")
+  - row_count > 0
+
+checks for silver.silver.customer:
+  - duplicate_count("customer_code") = 0
+  - missing_count("customer_code") = 0
+  - values in ("customer_type") must be in ("INDIVIDUAL", "ORGANIZATION", "PROPRIETARY")
+  - values in ("residency") must be in ("DOMESTIC", "FOREIGN")
+  - row_count > 0
+
+checks for silver.silver.customer_broker_history:
+  - missing_count("customer_code") = 0
+  - missing_count("broker_code") = 0
+  - row_count > 0
+
+checks for silver.silver.equity_trade:
+  - row_count > 0
+  - missing_count("trade_id") = 0
+  - values in ("side") must be in ("BUY", "SELL")
+  - freshness(trade_date) < 2d:
+      warn: when >= 2d
+
+checks for silver.silver.derivative_trade:
+  - row_count > 0
+  - values in ("position_side") must be in ("LONG", "SHORT")
+  - values in ("order_action") must be in ("OPEN", "CLOSE")
+
+checks for silver.silver.oef_trade:
+  - row_count > 0
+  - values in ("transaction_type") must be in ("SUBSCRIBE", "REDEEM", "SWITCH")
+
+checks for silver.silver.*:
+  - schema:
+      warn:
+        when schema changes:
+          column: any
+          type: any

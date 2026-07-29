@@ -1,0 +1,18 @@
+# Bronze Data Quality Checks - Soda
+# Runs after Bronze ETL (Spark) to validate raw Iceberg tables
+
+checks for bronze.bronze.*:
+  # Schema validation
+  - schema:
+      warn:
+        when schema changes:
+          column: any
+          type: any
+
+  # Row count - warn if zero
+  - row_count > 0:
+      warn: when <= 0
+
+  # Freshness - data should not be older than 2 days
+  - freshness(_loaded_at) < 2d:
+      warn: when >= 2d

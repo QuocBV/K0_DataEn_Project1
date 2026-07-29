@@ -1,0 +1,10 @@
+# Soda configuration for Trino Iceberg data sources
+data_source ssi_trino:
+  type: trino
+  host: ${TRINO_HOST}
+  port: ${TRINO_PORT}
+  username: ${TRINO_USER}
+  password: ${TRINO_PASSWORD}
+  database: gold
+  schema: gold
+  http_scheme: http

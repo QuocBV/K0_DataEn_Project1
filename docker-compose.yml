@@ -1,16 +1,13 @@
-# Local dev/test orchestration for hr-api, Airflow (orchestration), and dbt (ad-hoc runs).
+# Local dev/test orchestration for Lakehouse platform: hr-api, Airflow, Spark, Hive Metastore,
+# Trino, dbt, and Soda.
 #
 # NOT included here:
-# - SQL Server (Database/): gated behind the "sqlserver" profile below - it's a large image (EULA
-#   acceptance required) and per SSI policy, pulling it needs explicit confirmation. Run with:
-#     docker compose --profile sqlserver up -d sqlserver
-# - Airbyte: use its own official installer (abctl local install) instead of vendoring Airbyte's
-#   multi-service compose stack (temporal, minio, etc.) here - see
-#   https://docs.airbyte.com/using-airbyte/getting-started/oss-quickstart
-# - Snowflake: a managed cloud service, nothing to containerize; supply SNOWFLAKE_* env vars below.
+# - SQL Server (Database/): gated behind the "sqlserver" profile below
+# - Airbyte: use its own official installer (abctl local install)
+# - Amazon S3: managed service, supply AWS_* env vars below
 #
-# All secrets are read from a local .env file (gitignored) - never hardcode credentials in this
-# file. Copy .env.example to .env and fill in real values before running.
+# All secrets are read from a local .env file (gitignored). Copy .env.example to .env and fill in
+# real values before running.
 services:
   hr-api:
     build:
@@ -25,6 +22,7 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
+  # ====== Airflow ======
   airflow-postgres:
     image: postgres:16.4
     environment:
@@ -51,14 +49,15 @@ services:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
-      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
-      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
-      MSSQL_HOST: ${MSSQL_HOST}
-      MSSQL_EXPORT_USER: ${MSSQL_EXPORT_USER}
-      MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
-      HR_API_BASE_URL: http://hr-api:8000
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      TRINO_USER: ${TRINO_USER:-admin}
+      TRINO_PASSWORD: ${TRINO_PASSWORD:-}
       OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
+      HR_API_BASE_URL: http://hr-api:8000
     entrypoint: /bin/bash
     command: -c "airflow db migrate && airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@ssi.com.vn"
 
@@ -73,7 +72,8 @@ services:
     environment: *airflow-common-env
     volumes:
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
-      - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/spark:/opt/airflow/data-platform/spark
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
     ports:
       - "8080:8080"
     command: webserver
@@ -90,23 +90,104 @@ services:
     environment: *airflow-common-env
     volumes:
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
-      - ./data-platform/scripts:/opt/airflow/data-platform/scripts
+      - ./data-platform/spark:/opt/airflow/data-platform/spark
+      - ./data-platform/soda:/opt/airflow/data-platform/soda
     command: scheduler
     restart: unless-stopped
 
-  # Ad-hoc dbt runs: docker compose run --rm dbt run --select stg_common
+  # ====== Hive Metastore (Iceberg catalog) ======
+  hive-metastore:
+    image: apache/hive:4.0.0
+    hostname: hive-metastore
+    environment:
+      HMS_DATABASE_DRIVER: org.postgresql.Driver
+      HMS_DATABASE_URL: jdbc:postgresql://hive-metastore-db:5432/metastore
+      HMS_DATABASE_USER: hive
+      HMS_DATABASE_PASSWORD: hive
+      S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
+      S3_ACCESS_KEY: ${AWS_ACCESS_KEY_ID}
+      S3_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      hive-metastore-db:
+        condition: service_healthy
+    ports:
+      - "9083:9083"
+
+  hive-metastore-db:
+    image: postgres:16.4
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ====== Trino (SQL query engine for Iceberg) ======
+  trino:
+    image: trinodb/trino:462
+    hostname: trino
+    depends_on:
+      - hive-metastore
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./data-platform/trino/catalog:/etc/trino/catalog:ro
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+
+  # ====== Spark (ETL processing) ======
+  spark-master:
+    image: bitnami/spark:3.5.1
+    hostname: spark-master
+    environment:
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+    ports:
+      - "7077:7077"
+      - "8082:8080"
+
+  spark-worker:
+    image: bitnami/spark:3.5.1
+    hostname: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 8G
+      SPARK_WORKER_CORES: 4
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+
+  # ====== dbt (ad-hoc runs) ======
   dbt:
     build:
       context: ./data-platform/dbt
     environment:
-      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
-      SNOWFLAKE_TRANSFORM_USER: ${SNOWFLAKE_TRANSFORM_USER}
-      SNOWFLAKE_TRANSFORM_PASSWORD: ${SNOWFLAKE_TRANSFORM_PASSWORD}
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      TRINO_USER: ${TRINO_USER:-admin}
+      TRINO_PASSWORD: ${TRINO_PASSWORD:-}
     volumes:
       - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     profiles: ["tools"]
 
-  # Optional, local dev only - requires explicit opt-in (see header comment).
+  # ====== Optional, local dev only ======
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     environment:

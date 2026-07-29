@@ -1,0 +1,13 @@
+# Gold Data Quality Checks - Soda
+# Runs after dbt models complete to validate Gold Iceberg tables
+
+checks for gold.gold.broker_kpi:
+  - duplicate_count("broker_code") = 0
+  - missing_count("broker_code") = 0
+  - row_count > 0
+  - values in ("rank") must satisfy: rank >= 1
+
+checks for gold.gold.customer_kpi:
+  - duplicate_count("customer_code") = 0
+  - row_count > 0
+  - values in ("total_turnover") must be >= 0

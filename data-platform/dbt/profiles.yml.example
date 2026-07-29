@@ -1,25 +1,31 @@
 # Copy to profiles.yml (which is gitignored) or point --profiles-dir elsewhere. Never commit real
-# credentials - account/user/password/role all come from env vars injected by CNTT/vault.
+# credentials - all come from env vars.
 ssi_trading_analytics:
   target: dev
   outputs:
     dev:
-      type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('SNOWFLAKE_TRANSFORM_USER') }}"
-      password: "{{ env_var('SNOWFLAKE_TRANSFORM_PASSWORD') }}"
-      role: TRANSFORM_ROLE
-      database: ANALYTICS
-      warehouse: WH_TRANSFORM
-      schema: MARTS
+      type: trino
+      method: none  # Use Kerberos or LDAP in production; none for local dev
+      user: "{{ env_var('TRINO_USER', 'admin') }}"
+      password: "{{ env_var('TRINO_PASSWORD', '') }}"
+      database: gold
+      schema: gold
+      host: "{{ env_var('TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
       threads: 8
+      http_scheme: "{{ env_var('TRINO_HTTP_SCHEME', 'http') }}"
+      session_properties:
+        query_max_run_time: 10m
     prod:
-      type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('SNOWFLAKE_TRANSFORM_USER') }}"
-      password: "{{ env_var('SNOWFLAKE_TRANSFORM_PASSWORD') }}"
-      role: TRANSFORM_ROLE
-      database: ANALYTICS
-      warehouse: WH_TRANSFORM
-      schema: MARTS
+      type: trino
+      method: ldap
+      user: "{{ env_var('TRINO_USER') }}"
+      password: "{{ env_var('TRINO_PASSWORD') }}"
+      database: gold
+      schema: gold
+      host: "{{ env_var('TRINO_HOST') }}"
+      port: "{{ env_var('TRINO_PORT') | int }}"
       threads: 16
+      http_scheme: https
+      session_properties:
+        query_max_run_time: 30m
