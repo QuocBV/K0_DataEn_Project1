@@ -1,6 +1,7 @@
 """
-DAG 9: Reporting
-Runs dbt reporting models (reports views) after business processing is complete.
+DAG: Reporting
+Runs dbt reporting models (thin views that SELECT * FROM reporting.* Iceberg tables).
+Triggered after Commission Engine completes.
 """
 from datetime import datetime
 from airflow import DAG
@@ -12,7 +13,7 @@ DBT_DIR = "/opt/airflow/data-platform/dbt"
 with DAG(
     dag_id="reporting",
     default_args=DEFAULT_ARGS,
-    description="dbt run: Business Facts → Reporting views",
+    description="dbt run: thin views over reporting.* Iceberg (SELECT *)",
     schedule=None,
     start_date=datetime(2027, 1, 1),
     catchup=False,

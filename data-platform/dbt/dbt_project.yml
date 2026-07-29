@@ -26,5 +26,5 @@ models:
         +materialized: view
         +tags: ["intermediate"]
       reports:
-        +materialized: view # reports are thin views over fact/dim - always reflect latest state
+        +materialized: view
         +tags: ["report"]

@@ -6,10 +6,11 @@
 select
     'EQUITY' as product_type, account_id, security_id as instrument_id, position_date,
     quantity, avg_cost_price as avg_cost, market_value
-from {{ ref('stg_equity__position_daily') }}
+from {{ source('silver', 'position_daily') }}
+where _source_db = 'equity'
 
 {% if is_incremental() %}
-where position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'EQUITY')
+and position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'EQUITY')
 {% endif %}
 
 union all
@@ -17,10 +18,11 @@ union all
 select
     'DERIVATIVES' as product_type, account_id, contract_id as instrument_id, position_date,
     quantity, avg_cost_price as avg_cost, market_value
-from {{ ref('stg_derivatives__position_daily') }}
+from {{ source('silver', 'position_daily') }}
+where _source_db = 'derivatives'
 
 {% if is_incremental() %}
-where position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'DERIVATIVES')
+and position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'DERIVATIVES')
 {% endif %}
 
 union all
@@ -28,8 +30,9 @@ union all
 select
     'OEF' as product_type, account_id, fund_id as instrument_id, position_date,
     quantity_unit as quantity, avg_cost_nav as avg_cost, market_value
-from {{ ref('stg_oef__position_daily') }}
+from {{ source('silver', 'position_daily') }}
+where _source_db = 'oef'
 
 {% if is_incremental() %}
-where position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'OEF')
+and position_date > (select coalesce(max(position_date), '1900-01-01') from {{ this }} where product_type = 'OEF')
 {% endif %}

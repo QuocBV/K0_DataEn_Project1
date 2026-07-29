@@ -20,7 +20,7 @@ select
     br.start_date,
     br.end_date,
     br.is_active
-from {{ ref('stg_common__broker') }} br
+from {{ source('silver', 'broker') }} br
 left join {{ ref('dim_department') }} dep on dep.department_id = br.department_id
 left join {{ ref('dim_branch') }} bra on bra.branch_id = dep.branch_id
-left join {{ ref('stg_hr__employee') }} e on e.id_number = br.id_number
+left join {{ source('silver', 'employees') }} e on e.id_number = br.id_number

@@ -1,11 +1,12 @@
-# Copy to profiles.yml (which is gitignored) or point --profiles-dir elsewhere. Never commit real
-# credentials - all come from env vars.
+# Copy to profiles.yml (which is gitignored) or point --profiles-dir elsewhere.
+# dbt connects to Trino's company_data catalog for dim/fact and reads from
+# company_report catalog via source() macro.
 ssi_trading_analytics:
   target: dev
   outputs:
     dev:
       type: trino
-      method: none  # Use Kerberos or LDAP in production; none for local dev
+      method: none
       user: "{{ env_var('TRINO_USER', 'admin') }}"
       password: "{{ env_var('TRINO_PASSWORD', '') }}"
       database: gold

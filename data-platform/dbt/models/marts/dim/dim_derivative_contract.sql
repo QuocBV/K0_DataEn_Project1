@@ -7,4 +7,4 @@ select
     listing_date,
     maturity_date,
     is_active
-from {{ ref('stg_derivatives__derivative_contract') }}
+from {{ source('silver', 'derivative_contract') }}

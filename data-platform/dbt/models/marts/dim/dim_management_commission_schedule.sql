@@ -5,4 +5,4 @@ select
     effective_from,
     effective_to,
     is_current
-from {{ ref('stg_common__management_commission_schedule') }}
+from {{ source('silver', 'management_commission_schedule') }}

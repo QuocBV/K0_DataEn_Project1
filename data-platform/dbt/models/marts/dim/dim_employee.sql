@@ -19,4 +19,4 @@ select
     start_date,
     end_date,
     status
-from {{ ref('stg_hr__employee') }}
+from {{ source('silver', 'employees') }}

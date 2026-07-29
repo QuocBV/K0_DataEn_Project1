@@ -7,6 +7,6 @@ select
     d.head_employee_code,
     e.full_name as head_name,
     d.is_active
-from {{ ref('stg_common__department') }} d
-left join {{ ref('stg_hr__employee') }} e
+from {{ source('silver', 'department') }} d
+left join {{ source('silver', 'employees') }} e
     on e.employee_code = d.head_employee_code

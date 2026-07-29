@@ -1,0 +1,54 @@
+version: 2
+
+sources:
+  - name: silver
+    database: silver
+    schema: silver
+    description: "Silver Iceberg tables (cleaned/deduplicated by Spark ETL)"
+    tables:
+      - name: branch
+      - name: department
+      - name: broker
+      - name: customer
+      - name: customer_broker_history
+      - name: customer_risk_profile
+      - name: customer_segment_history
+      - name: customer_acquisition
+      - name: fee_schedule
+      - name: management_commission_schedule
+      - name: market_index_price
+      - name: trading_alert
+      - name: customer_complaint
+      - name: security
+      - name: daily_price
+      - name: account
+      - name: equity_trade
+      - name: account_balance_daily
+      - name: position_daily
+      - name: margin_loan_daily
+      - name: derivative_contract
+      - name: daily_settlement_price
+      - name: derivative_trade
+      - name: fund
+      - name: fund_nav_history
+      - name: oef_trade
+      - name: employees
+
+  - name: reporting
+    database: company_report
+    schema: reporting
+    description: "Reporting Mart Iceberg tables (computed by Spark Commission Engine)"
+    tables:
+      - name: rpt_broker_commission_revenue
+      - name: rpt_department_branch_ranking
+      - name: rpt_broker_performance
+      - name: rpt_trading_activity_summary
+      - name: rpt_aum_summary
+      - name: rpt_customer_acquisition_funnel
+      - name: rpt_customer_dormant
+      - name: rpt_position_concentration_risk
+      - name: rpt_margin_call_alert
+      - name: rpt_oef_fund_flow
+      - name: rpt_customer_investment_performance
+      - name: rpt_customer_cross_sell
+      - name: rpt_management_override_commission

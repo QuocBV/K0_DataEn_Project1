@@ -8,4 +8,4 @@ select
     valid_from,
     valid_to,
     is_current
-from {{ ref('stg_common__customer_broker_history') }}
+from {{ source('silver', 'customer_broker_history') }}

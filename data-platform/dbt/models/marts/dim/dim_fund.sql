@@ -6,4 +6,4 @@ select
     fund_manager,
     inception_date,
     is_active
-from {{ ref('stg_oef__fund') }}
+from {{ source('silver', 'fund') }}

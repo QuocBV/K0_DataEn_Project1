@@ -10,13 +10,13 @@ with current_broker as (
 
 current_segment as (
     select customer_code, segment
-    from {{ ref('stg_common__customer_segment_history') }}
+    from {{ source('silver', 'customer_segment_history') }}
     where is_current
 ),
 
 current_risk as (
     select customer_code, investor_classification, risk_level
-    from {{ ref('stg_common__customer_risk_profile') }}
+    from {{ source('silver', 'customer_risk_profile') }}
     where is_current
 )
 
@@ -35,8 +35,8 @@ select
     ca.acquisition_date,
     ca.referral_broker_code,
     ca.campaign_code
-from {{ ref('stg_common__customer') }} c
+from {{ source('silver', 'customer') }} c
 left join current_broker cb on cb.customer_code = c.customer_code
 left join current_segment cs on cs.customer_code = c.customer_code
 left join current_risk cr on cr.customer_code = c.customer_code
-left join {{ ref('stg_common__customer_acquisition') }} ca on ca.customer_code = c.customer_code
+left join {{ source('silver', 'customer_acquisition') }} ca on ca.customer_code = c.customer_code

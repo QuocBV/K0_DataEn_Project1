@@ -7,4 +7,4 @@ select
     effective_from,
     effective_to,
     is_current
-from {{ ref('stg_common__fee_schedule') }}
+from {{ source('silver', 'fee_schedule') }}

@@ -7,4 +7,4 @@ select
     security_type,
     listing_date,
     is_active
-from {{ ref('stg_equity__security') }}
+from {{ source('silver', 'security') }}

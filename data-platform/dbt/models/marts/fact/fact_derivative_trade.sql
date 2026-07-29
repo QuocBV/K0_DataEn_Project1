@@ -27,7 +27,7 @@ select
     order_id,
     source_system,
     ingested_at
-from {{ ref('stg_derivatives__derivative_trade') }}
+from {{ source('silver', 'derivative_trade') }}
 
 {% if is_incremental() %}
 where ingested_at > (select coalesce(max(ingested_at), '1900-01-01') from {{ this }})
