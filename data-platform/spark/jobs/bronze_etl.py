@@ -7,34 +7,32 @@ Usage (spark-submit):
     bronze_etl.py --date 2027-06-01 --source common
 """
 import argparse
-import sys
+import os
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col, lit, current_timestamp, input_file_name, regexp_extract
-from pyspark.sql.types import StructType, StructField, StringType, TimestampType
+from pyspark.sql.functions import col, lit, current_timestamp, input_file_name
+from pyspark.sql.types import StructType
 
-RAW_BUCKET = "s3a://ssi-raw"
-BRONZE_BUCKET = "s3a://ssi-bronze"
+RAW_BUCKET = "s3a://ssi-data/raw"
+BRONZE_BUCKET = "s3a://ssi-data/bronze"
 DATABASE = "bronze"
 
-# Schema definitions for each source (minimal - Spark can infer from Parquet, but we define
-# for explicit type casting)
 SOURCE_TABLES = {
     "common": [
-        "branch", "department", "broker", "customer", "customer_broker_history",
-        "customer_risk_profile", "customer_segment_history", "customer_acquisition",
-        "fee_schedule", "management_commission_schedule", "market_index_price",
-        "trading_alert", "customer_complaint"
+        "branch", "department", "broker", "customer", "account",
+        "customer_broker_history", "customer_risk_profile", "customer_segment_history",
+        "customer_acquisition", "fee_schedule", "management_commission_schedule",
+        "market_index_price", "trading_alert", "customer_complaint"
     ],
     "equity": [
-        "security", "daily_price", "account", "equity_trade",
+        "security", "daily_price", "equity_trade",
         "account_balance_daily", "position_daily", "margin_loan_daily"
     ],
     "derivatives": [
-        "derivative_contract", "daily_settlement_price", "account", "derivative_trade",
+        "derivative_contract", "daily_settlement_price", "derivative_trade",
         "account_balance_daily", "position_daily", "margin_loan_daily"
     ],
     "oef": [
-        "fund", "fund_nav_history", "account", "oef_trade",
+        "fund", "fund_nav_history", "oef_trade",
         "account_balance_daily", "position_daily"
     ],
     "hr": ["employees"]
@@ -50,9 +48,9 @@ def create_spark_session():
         .config("spark.sql.catalog.bronze.type", "hadoop") \
         .config("spark.sql.catalog.bronze.warehouse", BRONZE_BUCKET) \
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.hadoop.fs.s3a.access.key", sys.env.get("AWS_ACCESS_KEY_ID", "")) \
-        .config("spark.hadoop.fs.s3a.secret.key", sys.env.get("AWS_SECRET_ACCESS_KEY", "")) \
-        .config("spark.hadoop.fs.s3a.endpoint", sys.env.get("AWS_S3_ENDPOINT", "s3.amazonaws.com")) \
+        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("AWS_ACCESS_KEY_ID", "")) \
+        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("AWS_SECRET_ACCESS_KEY", "")) \
+        .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("AWS_S3_ENDPOINT", "s3.amazonaws.com")) \
         .config("spark.hadoop.fs.s3a.path.style.access", "true") \
         .getOrCreate()
 
@@ -66,7 +64,6 @@ def read_raw_table(spark: SparkSession, source_db: str, table: str, date: str) -
         print(f"[WARN] No data found at {path}, returning empty")
         return spark.createDataFrame([], StructType([]))
 
-    # Add ETL metadata
     df = df.withColumn("_loaded_at", current_timestamp()) \
            .withColumn("_source_file", input_file_name()) \
            .withColumn("_source_db", lit(source_db)) \
@@ -84,7 +81,6 @@ def write_bronze_iceberg(df: DataFrame, table: str, partition_col: str = "_load_
     target = f"bronze.{DATABASE}.{table}"
     print(f"[INFO] Writing {df.count()} rows to {target}")
 
-    # Use MERGE for CDC-like upsert; for simplicity in batch mode, use overwrite by partition
     df.write \
       .mode("overwrite") \
       .format("iceberg") \

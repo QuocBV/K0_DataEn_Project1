@@ -1,8 +1,9 @@
-{{ config(materialized='incremental', unique_key=['product_type', 'account_id', 'loan_date']) }}
+{{ config(materialized='incremental', unique_key=['product_type', 'account_no', 'loan_date']) }}
 
--- Grain: one row per (product_type, account_id, loan_date). No OEF here - fund certificates are
+-- Grain: one row per (product_type, account_no, loan_date). No OEF here - fund certificates are
 -- not traded on margin (see Database/OEF/04_account_position.sql).
-select 'EQUITY' as product_type, account_id, loan_date, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag
+-- account_no is the global unified key (SSI_Common.raw.account); no per-DB account_id collisions.
+select 'EQUITY' as product_type, account_no, loan_date, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag
 from {{ source('silver', 'margin_loan_daily') }}
 where _source_db = 'equity'
 
@@ -12,7 +13,7 @@ and loan_date > (select coalesce(max(loan_date), '1900-01-01') from {{ this }} w
 
 union all
 
-select 'DERIVATIVES' as product_type, account_id, loan_date, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag
+select 'DERIVATIVES' as product_type, account_no, loan_date, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag
 from {{ source('silver', 'margin_loan_daily') }}
 where _source_db = 'derivatives'
 

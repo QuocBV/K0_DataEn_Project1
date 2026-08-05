@@ -24,9 +24,9 @@ CREATE TABLE raw.oef_trade (
     source_system     VARCHAR(50)   NOT NULL CONSTRAINT df_oef_trade_source_system DEFAULT ('OEF'),
     source_updated_at DATETIME2(3)  NULL,
     ingested_at       DATETIME2(3)  NOT NULL CONSTRAINT df_oef_trade_ingested_at DEFAULT (SYSUTCDATETIME()),
+    -- account_no is a LOGICAL reference to SSI_Common.raw.account(account_no) - no FK
     CONSTRAINT pk_oef_trade PRIMARY KEY CLUSTERED (trade_id, trade_date),
     CONSTRAINT fk_oef_trade_fund FOREIGN KEY (fund_id) REFERENCES raw.fund(fund_id),
-    CONSTRAINT fk_oef_trade_account FOREIGN KEY (account_no) REFERENCES raw.account(account_no),
     CONSTRAINT chk_oef_trade_type CHECK (transaction_type IN ('SUBSCRIBE', 'REDEEM', 'SWITCH'))
 ) ON ps_oef_monthly(trade_date);
 GO

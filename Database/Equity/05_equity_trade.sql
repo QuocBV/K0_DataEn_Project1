@@ -27,9 +27,9 @@ CREATE TABLE raw.equity_trade (
     source_system     VARCHAR(50)   NOT NULL CONSTRAINT df_equity_trade_source_system DEFAULT ('CORE_TRADING'),
     source_updated_at DATETIME2(3)  NULL,
     ingested_at       DATETIME2(3)  NOT NULL CONSTRAINT df_equity_trade_ingested_at DEFAULT (SYSUTCDATETIME()),
+    -- account_no is a LOGICAL reference to SSI_Common.raw.account(account_no) - no FK
     CONSTRAINT pk_equity_trade PRIMARY KEY CLUSTERED (trade_id, trade_date),
     CONSTRAINT fk_equity_trade_security FOREIGN KEY (security_id) REFERENCES raw.security(security_id),
-    CONSTRAINT fk_equity_trade_account FOREIGN KEY (account_no) REFERENCES raw.account(account_no),
     CONSTRAINT chk_equity_trade_side CHECK (side IN ('BUY', 'SELL'))
 ) ON ps_equity_monthly(trade_date);
 GO

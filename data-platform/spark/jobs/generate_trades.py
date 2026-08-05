@@ -17,7 +17,7 @@ from pyspark.sql.types import (
     DecimalType, TimestampType, DateType, BooleanType
 )
 
-SILVER_BUCKET = "s3a://ssi-silver"
+SILVER_BUCKET = "s3a://ssi-data/silver"
 random.seed(42)
 
 

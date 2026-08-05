@@ -2,7 +2,7 @@
 
 ## Overall Flow
 
-``` text
+```text
 Source Systems
         │
         ▼
@@ -33,7 +33,7 @@ Silver Iceberg (S3)
 Soda Quality Check
         │
         ▼
-dbt + Trino
+dbt + Spark Thrift Server
         │
         ▼
 Gold Iceberg (S3)
@@ -50,223 +50,228 @@ Business Processing              Reporting / BI
 Business Fact Tables            Reporting Tables
         └───────────────┬───────────────┘
                         ▼
-                      Trino
+              Spark Thrift Server
                         │
                         ▼
                  BI / API / Analytics
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Step 1. Ingestion
 
 **Technology**
 
--   Airbyte
--   Debezium
--   Python (custom connectors)
+- Airbyte
+- Debezium
+- Python (custom connectors)
 
 **Responsibilities**
 
--   Extract data from source systems.
--   Load data into Amazon S3.
--   No transformation.
--   Preserve original data.
+- Extract data from source systems.
+- Load data into Amazon S3.
+- No transformation.
+- Preserve original data.
 
 **Output**
 
--   Raw Zone (Parquet/JSON)
+- Raw Zone (Parquet/JSON)
 
-------------------------------------------------------------------------
+---
 
 ## Step 2. Bronze Layer
 
 **Technology**
 
--   Airflow
--   Spark (PySpark)
--   Apache Iceberg
+- Airflow
+- Spark (PySpark)
+- Apache Iceberg
 
 **Responsibilities**
 
--   Validate schema
--   Cast data types
--   Add ETL metadata
--   Handle CDC merge
--   Partition data
--   Write Iceberg tables
+- Validate schema
+- Cast data types
+- Add ETL metadata
+- Handle CDC merge
+- Partition data
+- Write Iceberg tables
 
 **Business Logic**
 
--   Not allowed
+- Not allowed
 
 **Output**
 
--   Bronze Iceberg Tables
+- Bronze Iceberg Tables
 
-------------------------------------------------------------------------
+---
 
 ## Step 3. Bronze Data Quality
 
 **Technology**
 
--   Soda
+- Soda
 
 **Responsibilities**
 
--   Schema validation
--   Null check
--   Duplicate check
--   Freshness
--   Row count validation
+- Schema validation
+- Null check
+- Duplicate check
+- Freshness
+- Row count validation
 
-------------------------------------------------------------------------
+---
 
 ## Step 4. Silver Layer
 
 **Technology**
 
--   Spark (PySpark)
+- Spark (PySpark)
 
 **Responsibilities**
 
--   Cleaning
--   Deduplication
--   Standardization
--   Join multiple datasets
--   Data enrichment
--   Basic business rules
+- Cleaning
+- Deduplication
+- Standardization
+- Join multiple datasets
+- Data enrichment
+- Basic business rules
 
 **Output**
 
--   Silver Iceberg Tables
+- Silver Iceberg Tables
 
-------------------------------------------------------------------------
+---
 
 ## Step 5. Silver Data Quality
 
 **Technology**
 
--   Soda
+- Soda
 
 **Responsibilities**
 
--   Foreign key validation
--   Missing data check
--   Distribution check
--   Business validation
+- Foreign key validation
+- Missing data check
+- Distribution check
+- Business validation
 
-------------------------------------------------------------------------
+---
 
 ## Step 6. Gold Layer
 
 **Technology**
 
--   dbt
--   Trino
+- dbt
+- Spark Thrift Server
 
 **Responsibilities**
 
--   Fact tables
--   Dimension tables
--   Star schema
--   Data marts
--   Semantic layer
--   Simple SQL calculations
+- Fact tables
+- Dimension tables
+- Star schema
+- Data marts
+- Semantic layer
+- Simple SQL calculations
+
+**Implementation**
+
+- dbt connects to Spark Thrift Server (Iceberg catalog)
+- Reads Silver Iceberg tables, writes Gold Iceberg tables
 
 **Output**
 
--   Gold Iceberg Tables
+- Gold Iceberg Tables
 
-------------------------------------------------------------------------
+---
 
 ## Step 7. Gold Data Quality
 
 **Technology**
 
--   dbt Test
--   Soda
+- dbt Test
+- Soda
 
 **Responsibilities**
 
--   Unique constraints
--   Relationship validation
--   Accepted values
--   Business validation
+- Unique constraints
+- Relationship validation
+- Accepted values
+- Business validation
 
-------------------------------------------------------------------------
+---
 
 ## Step 8. Business Processing
 
 **Technology**
 
--   Spark (PySpark)
+- Spark (PySpark)
 
 **Responsibilities**
 
--   Complex business rules
--   Rule engine
--   KPI calculation
--   Ranking
--   Scoring
--   Multi-step calculations
+- Complex business rules
+- Rule engine
+- KPI calculation
+- Ranking
+- Scoring
+- Multi-step calculations
 
 **Implementation**
 
--   Python code
+- Python code (commission_engine.py)
 
 **Output**
 
--   Business Fact Tables (Iceberg)
+- Business Fact Tables (Iceberg)
 
-------------------------------------------------------------------------
+---
 
 ## Step 9. Reporting Layer
 
 **Technology**
 
--   dbt
+- dbt
 
 **Responsibilities**
 
--   Reporting models
--   Summary tables
--   Dashboard models
--   BI views
+- Reporting models
+- Summary tables
+- Dashboard models
+- BI views
 
 **Output**
 
--   Reporting Tables
+- Reporting Tables
 
-------------------------------------------------------------------------
+---
 
 ## Step 10. Query Layer
 
 **Technology**
 
--   Trino
+- Spark Thrift Server
 
 **Responsibilities**
 
--   SQL query engine
--   BI access
--   API access
+- SQL query engine
+- BI access
+- API access
 
-------------------------------------------------------------------------
+---
 
 # Technology Stack
 
-  Layer           Technology
-  --------------- ------------------------
-  Storage         Amazon S3
-  Table Format    Apache Iceberg
-  Ingestion       Airbyte
-  Orchestration   Apache Airflow
-  Processing      Apache Spark (PySpark)
-  Modeling        dbt
-  SQL Engine      Trino
-  Data Quality    Soda
-  BI              Power BI
+| Layer          | Technology             |
+| -------------- | ---------------------- |
+| Storage        | Amazon S3              |
+| Table Format   | Apache Iceberg         |
+| Ingestion      | Airbyte                |
+| Orchestration  | Apache Airflow         |
+| ETL Processing | Apache Spark (PySpark) |
+| Modeling       | dbt                    |
+| SQL Engine     | Spark Thrift Server    |
+| Data Quality   | Soda                   |
+| BI             | Power BI               |
 
 # Design Principles
 
@@ -274,7 +279,7 @@ Business Fact Tables            Reporting Tables
 2.  Airflow orchestrates only; it never processes data.
 3.  Spark handles ETL and complex business processing.
 4.  dbt is responsible for data modeling and reporting.
-5.  Trino provides SQL access to Iceberg tables.
+5.  Spark Thrift Server provides SQL access to Iceberg tables.
 6.  Soda validates data quality after each processing layer.
 7.  Keep business logic separate from data modeling.
 8.  All intermediate and final datasets are stored as Iceberg tables.

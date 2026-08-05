@@ -14,8 +14,8 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import col, row_number, coalesce, when, trim, upper, lit
 from pyspark.sql.window import Window
 
-BRONZE_BUCKET = "s3a://ssi-bronze"
-SILVER_BUCKET = "s3a://ssi-silver"
+BRONZE_BUCKET = "s3a://ssi-data/bronze"
+SILVER_BUCKET = "s3a://ssi-data/silver"
 DATABASE = "silver"
 
 

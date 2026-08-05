@@ -107,11 +107,12 @@ CROSS APPLY (SELECT CAST(10000 + (f.fund_id * 977) % 20000 AS DECIMAL(18,4)) AS 
 -- 3. Accounts: 400 of the 1000 SSI_Common customers get an OEF account (long-term investors -
 --    moderate penetration, lower than the 800 equity accounts).
 -------------------------------------------------------------------------------
-INSERT INTO raw.account (account_no, customer_code, broker_code, open_date)
+INSERT INTO SSI_Common.raw.account (account_no, customer_code, broker_code, product_type, open_date)
 SELECT TOP (400)
     '0003' + RIGHT('000000' + CAST(ROW_NUMBER() OVER (ORDER BY c.customer_code) AS VARCHAR(6)), 6),
     c.customer_code,
     cbh.broker_code,
+    'OEF',
     c.open_date
 FROM SSI_Common.raw.customer c
 JOIN SSI_Common.raw.customer_broker_history cbh
@@ -127,9 +128,10 @@ IF OBJECT_ID('tempdb..#acct_ranges') IS NOT NULL DROP TABLE #acct_ranges;
 ;WITH acct_weight AS (
     SELECT a.account_id, a.broker_code,
            CASE seg.segment WHEN 'VIP' THEN 4 WHEN 'PRIORITY' THEN 2 ELSE 1 END AS weight
-    FROM raw.account a
+    FROM SSI_Common.raw.account a
     JOIN SSI_Common.raw.customer_segment_history seg
         ON seg.customer_code = a.customer_code AND seg.is_current = 1
+    WHERE a.product_type = 'OEF'
 ),
 ranges AS (
     SELECT account_id, broker_code, weight,
@@ -200,7 +202,7 @@ BEGIN
         JOIN #month_days md ON md.rn = di.day_idx
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @acct_total) AS draw) ad
         JOIN #acct_ranges ar ON ad.draw BETWEEN ar.range_start AND ar.range_end
-        JOIN raw.account a ON a.account_id = ar.account_id
+        JOIN SSI_Common.raw.account a ON a.account_id = ar.account_id AND a.product_type = 'OEF'
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @fund_total) AS draw) fd
         JOIN #fund_ranges fr ON fd.draw BETWEEN fr.range_start AND fr.range_end
         LEFT JOIN raw.fund_nav_history nav ON nav.fund_id = fr.fund_id AND nav.nav_date = md.d
@@ -232,33 +234,35 @@ DROP TABLE #month_days;
 -------------------------------------------------------------------------------
 IF OBJECT_ID('tempdb..#account_wealth') IS NOT NULL DROP TABLE #account_wealth;
 SELECT
-    a.account_id,
+    a.account_no,
     CAST(1000000 + (ABS(CHECKSUM(NEWID())) % 49000000) AS DECIMAL(20,2)) AS base_cash,
     CAST(20000000 + (ABS(CHECKSUM(NEWID())) % 480000000) AS DECIMAL(20,2)) AS base_portfolio
 INTO #account_wealth
-FROM raw.account a;
+FROM SSI_Common.raw.account a
+WHERE a.product_type = 'OEF';
 
 ;WITH b AS (
     SELECT
         td.d AS balance_date,
-        aw.account_id,
+        aw.account_no,
         ROUND(aw.base_cash * (0.95 + (ABS(CHECKSUM(NEWID())) % 100) / 1000.0), 2) AS cash_balance,
         ROUND(aw.base_portfolio * (0.97 + (ABS(CHECKSUM(NEWID())) % 60) / 1000.0), 2) AS portfolio_value
     FROM #trading_days td
     CROSS JOIN #account_wealth aw
 )
-INSERT INTO raw.account_balance_daily (balance_date, account_id, cash_balance, portfolio_value, total_asset_value)
-SELECT balance_date, account_id, cash_balance, portfolio_value, cash_balance + portfolio_value
+INSERT INTO raw.account_balance_daily (balance_date, account_no, cash_balance, portfolio_value, total_asset_value)
+SELECT balance_date, account_no, cash_balance, portfolio_value, cash_balance + portfolio_value
 FROM b;
 
 -- Each account holds 1-2 funds across the period (buy-and-hold simplification).
 IF OBJECT_ID('tempdb..#account_holdings') IS NOT NULL DROP TABLE #account_holdings;
 ;WITH acct_holding_count AS (
-    SELECT account_id, 1 + (ABS(CHECKSUM(NEWID())) % 2) AS holding_count
-    FROM raw.account
+    SELECT account_no, 1 + (ABS(CHECKSUM(NEWID())) % 2) AS holding_count
+    FROM SSI_Common.raw.account
+    WHERE product_type = 'OEF'
 )
 SELECT
-    ahc.account_id,
+    ahc.account_no,
     f.fund_id,
     CAST(1000000 + (ABS(CHECKSUM(NEWID())) % 199000000) AS DECIMAL(20,4)) / (10000 + (f.fund_id * 977) % 20000) AS base_units,
     CAST(10000 + (f.fund_id * 977) % 20000 AS DECIMAL(18,4)) AS base_cost
@@ -268,10 +272,10 @@ CROSS APPLY (
     SELECT TOP (ahc.holding_count) fund_id FROM raw.fund ORDER BY NEWID()
 ) f;
 
-INSERT INTO raw.position_daily (position_date, account_id, fund_id, quantity_unit, avg_cost_nav, market_value)
+INSERT INTO raw.position_daily (position_date, account_no, fund_id, quantity_unit, avg_cost_nav, market_value)
 SELECT
     td.d,
-    ah.account_id,
+    ah.account_no,
     ah.fund_id,
     ah.base_units,
     ah.base_cost,

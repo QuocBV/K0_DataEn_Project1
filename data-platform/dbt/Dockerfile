@@ -6,7 +6,7 @@ FROM python:3.12.7-slim
 
 WORKDIR /dbt
 
-RUN pip install --no-cache-dir dbt-core==1.8.8 dbt-trino==1.8.3
+RUN pip install --no-cache-dir dbt-core==1.8.8 dbt-spark==1.8.2
 
 COPY . .
 

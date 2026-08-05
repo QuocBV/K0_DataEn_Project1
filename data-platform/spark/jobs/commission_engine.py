@@ -148,9 +148,9 @@ def compute_rpt_aum_summary(spark: SparkSession, date: str):
     cust_hist = spark.read.table("gold.gold.dim_customer_broker_history")
 
     # Join balance → account → broker via customer_broker_history at point in time
+    # account_no is the unified global key (fact snapshots carry account_no, not account_id).
     result = balance.alias("b") \
-        .join(account.alias("a"), (col("a.product_type") == col("b.product_type")) &
-                                   (col("a.account_id") == col("b.account_id"))) \
+        .join(account.alias("a"), col("a.account_no") == col("b.account_no")) \
         .join(cust_hist.alias("ch"),
               (col("ch.customer_code") == col("a.customer_code")) &
               (col("ch.is_current") == True)) \
@@ -212,20 +212,18 @@ def compute_rpt_position_concentration_risk(spark: SparkSession, date: str):
     sec = spark.read.table("gold.gold.dim_security")
     account = spark.read.table("gold.gold.dim_account")
 
-    # Portfolio value per account
-    acct_portfolio = pos.groupBy("account_id", "product_type") \
+    # Portfolio value per account (fact_position_daily now keys by account_no)
+    acct_portfolio = pos.groupBy("account_no", "product_type") \
         .agg(sum("market_value").alias("portfolio_value"))
 
     result = pos.alias("p") \
         .join(acct_portfolio.alias("ap"),
-              (col("ap.account_id") == col("p.account_id")) &
+              (col("ap.account_no") == col("p.account_no")) &
               (col("ap.product_type") == col("p.product_type"))) \
         .join(sec.alias("s"), col("s.security_id") == col("p.instrument_id"), "left") \
-        .join(account.alias("a"),
-              (col("a.account_id") == col("p.account_id")) &
-              (col("a.product_type") == col("p.product_type"))) \
+        .join(account.alias("a"), col("a.account_no") == col("p.account_no")) \
         .select(
-            col("p.product_type"), col("p.account_id"), col("a.customer_code"),
+            col("p.product_type"), col("p.account_no"), col("a.customer_code"),
             col("p.instrument_id"), col("s.symbol"), col("s.sector"),
             col("p.market_value"), col("ap.portfolio_value"),
             (col("p.market_value") / col("ap.portfolio_value")).alias("concentration_pct"),
@@ -243,14 +241,12 @@ def compute_rpt_margin_call_alert(spark: SparkSession, date: str):
     cust = spark.read.table("gold.gold.dim_customer")
 
     result = margin.alias("m") \
-        .join(account.alias("a"),
-              (col("a.product_type") == col("m.product_type")) &
-              (col("a.account_id") == col("m.account_id"))) \
+        .join(account.alias("a"), col("a.account_no") == col("m.account_no")) \
         .join(cust.alias("c"), col("c.customer_code") == col("a.customer_code")) \
         .join(broker.alias("b"), col("b.broker_code") == col("a.broker_code")) \
         .filter(col("m.call_margin_flag") == True) \
         .select(
-            col("m.product_type"), col("m.account_id"), col("a.account_no"),
+            col("m.product_type"), col("m.account_no"), col("a.account_no"),
             col("a.customer_code"), col("c.customer_name"),
             col("a.broker_code"), col("b.broker_name"),
             col("m.margin_ratio"), col("m.maintenance_margin_ratio"),
@@ -292,9 +288,7 @@ def compute_rpt_customer_investment_performance(spark: SparkSession, date: str):
 
     # Monthly customer values
     cmv = balance.alias("f") \
-        .join(account.alias("a"),
-              (col("a.product_type") == col("f.product_type")) &
-              (col("a.account_id") == col("f.account_id"))) \
+        .join(account.alias("a"), col("a.account_no") == col("f.account_no")) \
         .groupBy("a.customer_code",
                  year("f.balance_date").alias("value_year"),
                  month("f.balance_date").alias("value_month")) \
@@ -353,8 +347,8 @@ def compute_rpt_customer_cross_sell(spark: SparkSession, date: str):
 
 # ====== Report 13: Management Override Commission ======
 def compute_rpt_management_override_commission(spark: SparkSession, date: str):
-    # Uses broker_kpi from business layer, management commission schedule
-    broker_kpi = spark.read.table("business.business.broker_kpi").filter(col("_load_date") == date)
+    # Uses broker_kpi from Gold business fact layer, management commission schedule
+    broker_kpi = spark.read.table("gold.gold.broker_kpi").filter(col("_load_date") == date)
     mgmt_sched = spark.read.table("gold.gold.dim_management_commission_schedule") \
         .filter(col("is_current") == True)
 

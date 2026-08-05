@@ -1,32 +1,23 @@
-# Copy to profiles.yml (which is gitignored) or point --profiles-dir elsewhere.
-# dbt connects to Trino's company_data catalog for dim/fact and reads from
-# company_report catalog via source() macro.
+# Copy to profiles.yml (gitignored) or point --profiles-dir elsewhere.
+# dbt connects to Spark Thrift Server (Iceberg catalog) for Gold dim/fact and Reporting marts.
 ssi_trading_analytics:
   target: dev
   outputs:
     dev:
-      type: trino
-      method: none
-      user: "{{ env_var('TRINO_USER', 'admin') }}"
-      password: "{{ env_var('TRINO_PASSWORD', '') }}"
-      database: gold
+      type: spark
+      method: thrift
+      host: "{{ env_var('SPARK_THRIFT_HOST', 'spark-thriftserver') }}"
+      port: "{{ env_var('SPARK_THRIFT_PORT', '10000') | int }}"
+      user: "{{ env_var('SPARK_THRIFT_USER', 'admin') }}"
       schema: gold
-      host: "{{ env_var('TRINO_HOST', 'localhost') }}"
-      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
+      database: gold
       threads: 8
-      http_scheme: "{{ env_var('TRINO_HTTP_SCHEME', 'http') }}"
-      session_properties:
-        query_max_run_time: 10m
     prod:
-      type: trino
-      method: ldap
-      user: "{{ env_var('TRINO_USER') }}"
-      password: "{{ env_var('TRINO_PASSWORD') }}"
-      database: gold
+      type: spark
+      method: thrift
+      host: "{{ env_var('SPARK_THRIFT_HOST') }}"
+      port: "{{ env_var('SPARK_THRIFT_PORT') | int }}"
+      user: "{{ env_var('SPARK_THRIFT_USER') }}"
       schema: gold
-      host: "{{ env_var('TRINO_HOST') }}"
-      port: "{{ env_var('TRINO_PORT') | int }}"
+      database: gold
       threads: 16
-      http_scheme: https
-      session_properties:
-        query_max_run_time: 30m

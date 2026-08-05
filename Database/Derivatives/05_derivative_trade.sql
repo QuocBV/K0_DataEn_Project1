@@ -26,9 +26,9 @@ CREATE TABLE raw.derivative_trade (
     source_system     VARCHAR(50)   NOT NULL CONSTRAINT df_derivative_trade_source_system DEFAULT ('DERIVATIVES'),
     source_updated_at DATETIME2(3)  NULL,
     ingested_at       DATETIME2(3)  NOT NULL CONSTRAINT df_derivative_trade_ingested_at DEFAULT (SYSUTCDATETIME()),
+    -- account_no is a LOGICAL reference to SSI_Common.raw.account(account_no) - no FK
     CONSTRAINT pk_derivative_trade PRIMARY KEY CLUSTERED (trade_id, trade_date),
     CONSTRAINT fk_derivative_trade_contract FOREIGN KEY (contract_id) REFERENCES raw.derivative_contract(contract_id),
-    CONSTRAINT fk_derivative_trade_account FOREIGN KEY (account_no) REFERENCES raw.account(account_no),
     CONSTRAINT chk_derivative_trade_side CHECK (position_side IN ('LONG', 'SHORT')),
     CONSTRAINT chk_derivative_trade_action CHECK (order_action IN ('OPEN', 'CLOSE'))
 ) ON ps_derivatives_monthly(trade_date);

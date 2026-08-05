@@ -15,7 +15,7 @@ from _common import DEFAULT_ARGS
 SPARK_JOBS_DIR = "/opt/airflow/data-platform/spark/jobs"
 
 # Dataset này sẽ trigger main_pipeline sau khi trades được sinh
-DS_TRADES_GENERATED = Dataset("s3://ssi-silver/_TRADES_GENERATED")
+DS_TRADES_GENERATED = Dataset("s3://ssi-data/silver/_TRADES_GENERATED")
 
 with DAG(
     dag_id="generate_trades",

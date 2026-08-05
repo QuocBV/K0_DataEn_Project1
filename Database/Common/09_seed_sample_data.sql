@@ -24,6 +24,14 @@ INSERT INTO raw.customer (customer_code, customer_name, customer_type, residency
     ('KH00001', N'Pham Thi D',      'INDIVIDUAL',   'DOMESTIC', '2022-05-01'),
     ('KH00002', N'Cong ty TNHH E',  'ORGANIZATION', 'DOMESTIC', '2022-08-15');
 
+-- Unified accounts shared by all 3 product lines (04b_account.sql).
+-- 1 customer -> many accounts; each account trades exactly 1 product type.
+INSERT INTO raw.account (account_no, customer_code, broker_code, product_type, open_date) VALUES
+    ('0001000001', 'KH00001', 'MG001', 'EQUITY',      '2022-05-01'),
+    ('0001000002', 'KH00002', 'MG002', 'EQUITY',      '2022-08-15'),
+    ('0002000001', 'KH00002', 'MG002', 'DERIVATIVES', '2022-08-15'),
+    ('0003000001', 'KH00001', 'MG001', 'OEF',         '2022-05-01');
+
 EXEC raw.usp_assign_broker @customer_code = 'KH00001', @broker_code = 'MG001', @effective_date = '2022-05-01';
 EXEC raw.usp_assign_broker @customer_code = 'KH00002', @broker_code = 'MG002', @effective_date = '2022-08-15';
 

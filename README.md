@@ -8,47 +8,47 @@ Chứng chỉ quỹ mở (OEF) của SSI Securities. Kiến trúc **Lakehouse** 
 ## Kiến trúc tổng quan
 
 ```text
-SQL Server (4 DB)     Airbyte         s3://company-data/
-┌─────────────┐      ┌──────┐         ┌──────────┐
-│ Dimension    │ ────▶│ S3  │────────▶│ raw/     │
-│ tables       │      │ Raw │         ├──────────┤
-└─────────────┘      └──────┘         │ bronze/  │ ◄── Spark (Iceberg)
-HR API ──────────────▶──────┘         ├──────────┤
-                                       │ silver/  │ ◄── Spark (Iceberg)
-                                       ├──────────┤
-                                       │ gold/    │ ◄── dbt + Trino (Iceberg)
-                                       │  dim_*   │
-                                       │  fact_*  │
-                                       ├──────────┤
-                                       │ business/│ ◄── Spark (Iceberg)
-                                       └──────────┘
-                                            │ Spark Commission Engine
-                                            ▼
-                                       s3://company-report/
-                                       ┌──────────────┐
-                                       │ reporting/   │ ◄── Spark (Iceberg)
-                                       │ fact_commission│
-                                       │ 13 rpt_*     │
-                                       └──────┬───────┘
-                                              │ dbt views (SELECT *)
-                                              ▼
-                                            Trino → BI
+SQL Server (4 DB)      Airbyte          s3://ssi-data/
+┌─────────────┐       ┌──────┐          ┌──────────┐
+│ Dimension    │ ────▶│ S3  │─────────▶│ raw/     │
+│ tables       │      │ Raw │          ├──────────┤
+└─────────────┘      └──────┘          │ bronze/  │ ◄── Spark (Iceberg)
+HR API ─────────────▶──────┘           ├──────────┤
+                                        │ silver/  │ ◄── Spark (Iceberg)
+                                        ├──────────┤
+                                        │ gold/    │ ◄── dbt + Spark Thrift (Iceberg)
+                                        │  dim_*   │
+                                        │  fact_*  │
+                                        └──────────┘
+                                             │ Spark Commission Engine
+                                             ▼
+                                        s3://ssi-report/
+                                        ┌──────────────┐
+                                        │ reporting/   │ ◄── Spark (Iceberg)
+                                        │ fact_commission│
+                                        │ 13 rpt_*     │
+                                        └──────┬───────┘
+                                               │ dbt views (SELECT *)
+                                               ▼
+                                        Spark Thrift Server
+                                               │
+                                               ▼
+                                             BI / API
 ```
 
 ## Technology Stack
 
-| Layer                  | Technology           | Storage                              |
-| ---------------------- | -------------------- | ------------------------------------ |
-| Source OLTP            | SQL Server           | `Database/`                          |
-| Ingestion              | Airbyte → S3 Parquet | `s3://company-data/raw/`             |
-| Bronze (raw → Iceberg) | Spark                | `s3://company-data/bronze/`          |
-| Silver (clean/dedup)   | Spark                | `s3://company-data/silver/`          |
-| Gold (dim/fact)        | dbt + Trino          | `s3://company-data/gold/`            |
-| Business (KPI)         | Spark                | `s3://company-data/business/`        |
-| **Commission Engine**  | **Spark**            | **`s3://company-report/reporting/`** |
-| Reporting Views        | dbt (SELECT \*)      | Trino view                           |
-| SQL Engine             | Trino                | Iceberg → S3                         |
-| Data Quality           | Soda                 | -                                    |
+| Layer                  | Technology                | Storage                          |
+| ---------------------- | ------------------------- | -------------------------------- |
+| Source OLTP            | SQL Server                | `Database/`                      |
+| Ingestion              | Airbyte → S3 Parquet      | `s3://ssi-data/raw/`             |
+| Bronze (raw → Iceberg) | Spark                     | `s3://ssi-data/bronze/`          |
+| Silver (clean/dedup)   | Spark                     | `s3://ssi-data/silver/`          |
+| Gold (dim/fact)        | dbt + Spark Thrift Server | `s3://ssi-data/gold/`            |
+| **Commission Engine**  | **Spark**                 | **`s3://ssi-report/reporting/`** |
+| Reporting Views        | dbt (SELECT \*)           | Spark Thrift view                |
+| SQL Engine             | **Spark Thrift Server**   | Iceberg → S3                     |
+| Data Quality           | Soda                      | -                                |
 
 ## Iceberg Time-Travel
 
@@ -59,7 +59,7 @@ SELECT * FROM gold.dim_customer
 FOR VERSION AS OF TIMESTAMP '2027-03-15 10:00:00'
 ```
 
-Trino catalog: `company_data` (gold), `company_report` (reporting).
+Query qua **Spark Thrift Server** (không dùng Trino).
 
 ## Cấu trúc thư mục
 
@@ -70,27 +70,26 @@ data-platform/
   dbt/models/marts/        dim/, fact/, reports/ (views)
   dbt/snapshots/           SCD2 snapshot: snap_customer_profile
   airflow/dags/            10 DAGs
-  trino/catalog/           company_data.properties + company_report.properties
-  soda/checks/             Bronze / Silver / Gold quality checks
-docker-compose.yml         Airflow + Spark + Hive Metastore + Trino + dbt
+  soda/                    Quality checks (Spark session)
+docker-compose.yml         Airflow + Spark (Master/Worker/Thrift) + dbt
 ```
 
 ## 10 Airflow DAGs
 
-| #   | DAG                     | Vai trò                  | Ghi vào                              |
-| --- | ----------------------- | ------------------------ | ------------------------------------ |
-| 0   | `generate_trades`       | Spark sinh giao dịch     | Silver Equity/Derivatives/OEF        |
-| 1   | `ingest_raw`            | Airbyte → Raw Parquet    | `s3://company-data/raw/`             |
-| 2   | `bronze_etl`            | Spark Bronze ETL         | `s3://company-data/bronze/`          |
-| 3   | `bronze_soda`           | Soda quality             | -                                    |
-| 4   | `silver_etl`            | Spark Silver ETL         | `s3://company-data/silver/`          |
-| 5   | `silver_soda`           | Soda quality             | -                                    |
-| 6   | `gold_dbt`              | dbt dim/fact             | `s3://company-data/gold/`            |
-| 7   | `gold_quality`          | dbt test + Soda          | -                                    |
-| 8   | **`commission_engine`** | **Spark tính 13 report** | **`s3://company-report/reporting/`** |
-| 9   | `reporting`             | dbt views (SELECT \*)    | Trino views                          |
+| #   | DAG                     | Vai trò                  | Ghi vào                          |
+| --- | ----------------------- | ------------------------ | -------------------------------- |
+| 0   | `generate_trades`       | Spark sinh giao dịch     | Silver Equity/Derivatives/OEF    |
+| 1   | `ingest_raw`            | Airbyte → Raw Parquet    | `s3://ssi-data/raw/`             |
+| 2   | `bronze_etl`            | Spark Bronze ETL         | `s3://ssi-data/bronze/`          |
+| 3   | `bronze_soda`           | Soda quality             | -                                |
+| 4   | `silver_etl`            | Spark Silver ETL         | `s3://ssi-data/silver/`          |
+| 5   | `silver_soda`           | Soda quality             | -                                |
+| 6   | `gold_dbt`              | dbt dim/fact             | `s3://ssi-data/gold/`            |
+| 7   | `gold_quality`          | dbt test + Soda          | -                                |
+| 8   | **`commission_engine`** | **Spark tính 13 report** | **`s3://ssi-report/reporting/`** |
+| 9   | `reporting`             | dbt views (SELECT \*)    | Spark Thrift views               |
 
 ## 13 Reports (tính bởi Spark Commission Engine)
 
-Kết quả ghi vào `s3://company-report/reporting/` dưới dạng Iceberg tables.
-dbt chỉ tạo view `SELECT *` để Trino/BI có thể query.
+Kết quả ghi vào `s3://ssi-report/reporting/` dưới dạng Iceberg tables.
+dbt chỉ tạo view `SELECT *` để BI có thể query qua Spark Thrift Server.

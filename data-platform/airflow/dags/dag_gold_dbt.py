@@ -1,6 +1,6 @@
 """
 DAG 6: Gold dbt
-Runs dbt models (dim, fact, intermediate) via Trino to build Gold Iceberg tables.
+Runs dbt models (dim, fact, intermediate) via Spark Thrift Server to build Gold Iceberg tables.
 """
 from datetime import datetime
 from airflow import DAG
@@ -12,11 +12,11 @@ DBT_DIR = "/opt/airflow/data-platform/dbt"
 with DAG(
     dag_id="gold_dbt",
     default_args=DEFAULT_ARGS,
-    description="dbt run: Silver → Gold dim/fact (Iceberg tables via Trino)",
+    description="dbt run: Silver → Gold dim/fact (Iceberg tables via Spark Thrift)",
     schedule=None,
     start_date=datetime(2027, 1, 1),
     catchup=False,
-    tags=["dbt", "gold", "trino"],
+    tags=["dbt", "gold", "spark"],
 ) as dag:
 
     dbt_run = BashOperator(

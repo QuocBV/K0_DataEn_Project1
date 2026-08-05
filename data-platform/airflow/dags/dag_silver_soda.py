@@ -1,16 +1,18 @@
 """
-DAG 5: Silver Soda
-Runs Soda quality checks on Silver Iceberg tables after Silver ETL.
+DAG: Silver Soda
+Runs Soda quality checks on Silver Iceberg tables via Spark session.
 """
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from _common import DEFAULT_ARGS
 
+SODA_DIR = "/opt/airflow/data-platform/soda"
+
 with DAG(
     dag_id="silver_soda",
     default_args=DEFAULT_ARGS,
-    description="Soda quality checks on Silver layer",
+    description="Soda quality checks on Silver layer (Spark)",
     schedule=None,
     start_date=datetime(2027, 1, 1),
     catchup=False,
@@ -20,10 +22,8 @@ with DAG(
     silver_checks = BashOperator(
         task_id="soda_scan_silver",
         bash_command=(
-            "soda scan "
-            "-d ssi_trino "
-            "-c /opt/airflow/data-platform/soda/configuration.yml "
-            "/opt/airflow/data-platform/soda/checks/silver/silver_quality.yml "
+            f"cd {SODA_DIR} && "
+            f"python run_scan.py {SODA_DIR}/checks/silver/silver_quality.yml "
         ),
     )
 

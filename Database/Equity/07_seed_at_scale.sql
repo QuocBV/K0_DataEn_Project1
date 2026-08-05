@@ -157,30 +157,28 @@ CROSS APPLY (
 -------------------------------------------------------------------------------
 -- 3. Accounts: 800 of the 1000 SSI_Common customers get an equity account (most retail investors
 --    have a cash account). broker_code is the customer's current care broker from SSI_Common.
+--    NOTE: raw.account now lives in SSI_Common (unified table, product_type='EQUITY').
 -------------------------------------------------------------------------------
-INSERT INTO raw.account (account_no, customer_code, broker_code, open_date)
+INSERT INTO SSI_Common.raw.account (account_no, customer_code, broker_code, product_type, open_date)
 SELECT TOP (800)
     '0001' + RIGHT('000000' + CAST(ROW_NUMBER() OVER (ORDER BY c.customer_code) AS VARCHAR(6)), 6),
     c.customer_code,
     cbh.broker_code,
+    'EQUITY',
     c.open_date
 FROM SSI_Common.raw.customer c
 JOIN SSI_Common.raw.customer_broker_history cbh
     ON cbh.customer_code = c.customer_code AND cbh.is_current = 1
 WHERE c.customer_type <> 'PROPRIETARY'
 ORDER BY NEWID();
-
--------------------------------------------------------------------------------
--- 4. Weighted draw ranges for account (VIP/PRIORITY trade more) and security (blue-chip sectors
---    trade disproportionately more) - built once, reused across all 6 months.
--------------------------------------------------------------------------------
 IF OBJECT_ID('tempdb..#acct_ranges') IS NOT NULL DROP TABLE #acct_ranges;
 ;WITH acct_weight AS (
     SELECT a.account_id, a.broker_code,
            CASE seg.segment WHEN 'VIP' THEN 8 WHEN 'PRIORITY' THEN 3 ELSE 1 END AS weight
-    FROM raw.account a
+    FROM SSI_Common.raw.account a
     JOIN SSI_Common.raw.customer_segment_history seg
         ON seg.customer_code = a.customer_code AND seg.is_current = 1
+    WHERE a.product_type = 'EQUITY'
 ),
 ranges AS (
     SELECT account_id, broker_code, weight,
@@ -247,7 +245,7 @@ BEGIN
         JOIN #month_days md ON md.rn = di.day_idx
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @acct_total) AS draw) ad
         JOIN #acct_ranges ar ON ad.draw BETWEEN ar.range_start AND ar.range_end
-        JOIN raw.account a ON a.account_id = ar.account_id
+        JOIN SSI_Common.raw.account a ON a.account_id = ar.account_id AND a.product_type = 'EQUITY'
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @sec_total) AS draw) sd
         JOIN #sec_ranges sr ON sd.draw BETWEEN sr.range_start AND sr.range_end
         JOIN raw.security sec ON sec.security_id = sr.security_id
@@ -282,34 +280,36 @@ DROP TABLE #month_days;
 -------------------------------------------------------------------------------
 IF OBJECT_ID('tempdb..#account_wealth') IS NOT NULL DROP TABLE #account_wealth;
 SELECT
-    a.account_id,
+    a.account_no,
     CAST(5000000 + (ABS(CHECKSUM(NEWID())) % 495000000) AS DECIMAL(20,2)) AS base_cash,
     CAST(10000000 + (ABS(CHECKSUM(NEWID())) % 990000000) AS DECIMAL(20,2)) AS base_portfolio
 INTO #account_wealth
-FROM raw.account a;
+FROM SSI_Common.raw.account a
+WHERE a.product_type = 'EQUITY';
 
 ;WITH b AS (
     SELECT
         td.d AS balance_date,
-        aw.account_id,
+        aw.account_no,
         ROUND(aw.base_cash * (0.9 + (ABS(CHECKSUM(NEWID())) % 200) / 1000.0), 2) AS cash_balance,
         ROUND(aw.base_portfolio * (0.9 + (ABS(CHECKSUM(NEWID())) % 200) / 1000.0), 2) AS portfolio_value
     FROM #trading_days td
     CROSS JOIN #account_wealth aw
 )
-INSERT INTO raw.account_balance_daily (balance_date, account_id, cash_balance, portfolio_value, total_asset_value)
-SELECT balance_date, account_id, cash_balance, portfolio_value, cash_balance + portfolio_value
+INSERT INTO raw.account_balance_daily (balance_date, account_no, cash_balance, portfolio_value, total_asset_value)
+SELECT balance_date, account_no, cash_balance, portfolio_value, cash_balance + portfolio_value
 FROM b;
 
 -- Each account holds a fixed set of 3-8 securities across the period (simplification - a real
 -- ledger would open/close positions over time as trades settle).
 IF OBJECT_ID('tempdb..#account_holdings') IS NOT NULL DROP TABLE #account_holdings;
 ;WITH acct_holding_count AS (
-    SELECT account_id, 3 + (ABS(CHECKSUM(NEWID())) % 6) AS holding_count
-    FROM raw.account
+    SELECT account_no, 3 + (ABS(CHECKSUM(NEWID())) % 6) AS holding_count
+    FROM SSI_Common.raw.account
+    WHERE product_type = 'EQUITY'
 )
 SELECT
-    ahc.account_id,
+    ahc.account_no,
     s.security_id,
     (1 + ABS(CHECKSUM(NEWID())) % 50) * 100 AS base_qty,
     CAST(20 + (s.security_id * 37) % 100 AS DECIMAL(18,4)) AS base_cost
@@ -319,10 +319,10 @@ CROSS APPLY (
     SELECT TOP (ahc.holding_count) security_id FROM raw.security ORDER BY NEWID()
 ) s;
 
-INSERT INTO raw.position_daily (position_date, account_id, security_id, quantity, avg_cost_price, market_value)
+INSERT INTO raw.position_daily (position_date, account_no, security_id, quantity, avg_cost_price, market_value)
 SELECT
     td.d,
-    ah.account_id,
+    ah.account_no,
     ah.security_id,
     ah.base_qty,
     ah.base_cost,
@@ -335,24 +335,24 @@ LEFT JOIN raw.daily_price dp ON dp.security_id = ah.security_id AND dp.price_dat
 -- the 0.15 maintenance threshold, giving rpt_margin_call_alert real rows to surface.
 IF OBJECT_ID('tempdb..#margin_accounts') IS NOT NULL DROP TABLE #margin_accounts;
 SELECT
-    a.account_id,
+    a.account_no,
     CAST(20000000 + (ABS(CHECKSUM(NEWID())) % 480000000) AS DECIMAL(20,2)) AS base_loan
 INTO #margin_accounts
-FROM raw.account a
-WHERE ABS(CHECKSUM(NEWID())) % 100 < 30;
+FROM SSI_Common.raw.account a
+WHERE a.product_type = 'EQUITY' AND ABS(CHECKSUM(NEWID())) % 100 < 30;
 
 ;WITH m AS (
     SELECT
         td.d AS loan_date,
-        ma.account_id,
+        ma.account_no,
         ROUND(ma.base_loan * (0.85 + (ABS(CHECKSUM(NEWID())) % 300) / 1000.0), 2) AS margin_loan_balance,
         CAST(0.10 + (ABS(CHECKSUM(NEWID())) % 40) / 100.0 AS DECIMAL(9,4)) AS margin_ratio
     FROM #trading_days td
     CROSS JOIN #margin_accounts ma
 )
-INSERT INTO raw.margin_loan_daily (loan_date, account_id, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag)
+INSERT INTO raw.margin_loan_daily (loan_date, account_no, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag)
 SELECT
-    loan_date, account_id, margin_loan_balance, margin_ratio,
+    loan_date, account_no, margin_loan_balance, margin_ratio,
     0.15,
     CASE WHEN margin_ratio < 0.15 THEN 1 ELSE 0 END
 FROM m;

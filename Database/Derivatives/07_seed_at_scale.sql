@@ -112,11 +112,12 @@ JOIN raw.derivative_contract c ON td.d BETWEEN c.listing_date AND c.maturity_dat
 --    sophisticated subset than equity's 800 - overlap with equity accounts is expected/desired,
 --    it's what rpt_customer_cross_sell measures).
 -------------------------------------------------------------------------------
-INSERT INTO raw.account (account_no, customer_code, broker_code, open_date)
+INSERT INTO SSI_Common.raw.account (account_no, customer_code, broker_code, product_type, open_date)
 SELECT TOP (250)
     '0002' + RIGHT('000000' + CAST(ROW_NUMBER() OVER (ORDER BY c.customer_code) AS VARCHAR(6)), 6),
     c.customer_code,
     cbh.broker_code,
+    'DERIVATIVES',
     c.open_date
 FROM SSI_Common.raw.customer c
 JOIN SSI_Common.raw.customer_broker_history cbh
@@ -132,9 +133,10 @@ IF OBJECT_ID('tempdb..#acct_ranges') IS NOT NULL DROP TABLE #acct_ranges;
 ;WITH acct_weight AS (
     SELECT a.account_id, a.broker_code,
            CASE seg.segment WHEN 'VIP' THEN 10 WHEN 'PRIORITY' THEN 3 ELSE 1 END AS weight
-    FROM raw.account a
+    FROM SSI_Common.raw.account a
     JOIN SSI_Common.raw.customer_segment_history seg
         ON seg.customer_code = a.customer_code AND seg.is_current = 1
+    WHERE a.product_type = 'DERIVATIVES'
 ),
 ranges AS (
     SELECT account_id, broker_code, weight,
@@ -205,7 +207,7 @@ BEGIN
         JOIN #month_days md ON md.rn = di.day_idx
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @acct_total) AS draw) ad
         JOIN #acct_ranges ar ON ad.draw BETWEEN ar.range_start AND ar.range_end
-        JOIN raw.account a ON a.account_id = ar.account_id
+        JOIN SSI_Common.raw.account a ON a.account_id = ar.account_id AND a.product_type = 'DERIVATIVES'
         CROSS APPLY (SELECT 1 + (ABS(CHECKSUM(NEWID())) % @contract_total) AS draw) cd
         JOIN #contract_ranges cr ON cd.draw BETWEEN cr.range_start AND cr.range_end
         -- Join the contract's own multiplier instead of hardcoding 100000 below: every generated
@@ -244,23 +246,24 @@ DROP TABLE #contract_ranges;
 -------------------------------------------------------------------------------
 IF OBJECT_ID('tempdb..#account_wealth') IS NOT NULL DROP TABLE #account_wealth;
 SELECT
-    a.account_id,
+    a.account_no,
     CAST(20000000 + (ABS(CHECKSUM(NEWID())) % 480000000) AS DECIMAL(20,2)) AS base_cash,
     CAST(10000000 + (ABS(CHECKSUM(NEWID())) % 290000000) AS DECIMAL(20,2)) AS base_portfolio
 INTO #account_wealth
-FROM raw.account a;
+FROM SSI_Common.raw.account a
+WHERE a.product_type = 'DERIVATIVES';
 
 ;WITH b AS (
     SELECT
         td.d AS balance_date,
-        aw.account_id,
+        aw.account_no,
         ROUND(aw.base_cash * (0.9 + (ABS(CHECKSUM(NEWID())) % 200) / 1000.0), 2) AS cash_balance,
         ROUND(aw.base_portfolio * (0.9 + (ABS(CHECKSUM(NEWID())) % 200) / 1000.0), 2) AS portfolio_value
     FROM #trading_days td
     CROSS JOIN #account_wealth aw
 )
-INSERT INTO raw.account_balance_daily (balance_date, account_id, cash_balance, portfolio_value, total_asset_value)
-SELECT balance_date, account_id, cash_balance, portfolio_value, cash_balance + portfolio_value
+INSERT INTO raw.account_balance_daily (balance_date, account_no, cash_balance, portfolio_value, total_asset_value)
+SELECT balance_date, account_no, cash_balance, portfolio_value, cash_balance + portfolio_value
 FROM b;
 
 -- Each account holds 1-3 open contract positions across the period (simplification). Candidates
@@ -269,11 +272,12 @@ FROM b;
 -- of the period, with no settlement price ever available and a market_value frozen at base_cost.
 IF OBJECT_ID('tempdb..#account_holdings') IS NOT NULL DROP TABLE #account_holdings;
 ;WITH acct_holding_count AS (
-    SELECT account_id, 1 + (ABS(CHECKSUM(NEWID())) % 3) AS holding_count
-    FROM raw.account
+    SELECT account_no, 1 + (ABS(CHECKSUM(NEWID())) % 3) AS holding_count
+    FROM SSI_Common.raw.account
+    WHERE product_type = 'DERIVATIVES'
 )
 SELECT
-    ahc.account_id,
+    ahc.account_no,
     c.contract_id,
     c.multiplier,
     CASE WHEN ABS(CHECKSUM(NEWID())) % 2 = 0 THEN 'LONG' ELSE 'SHORT' END AS position_side,
@@ -288,10 +292,10 @@ CROSS APPLY (
     ORDER BY NEWID()
 ) c;
 
-INSERT INTO raw.position_daily (position_date, account_id, contract_id, position_side, quantity, avg_cost_price, market_value)
+INSERT INTO raw.position_daily (position_date, account_no, contract_id, position_side, quantity, avg_cost_price, market_value)
 SELECT
     td.d,
-    ah.account_id,
+    ah.account_no,
     ah.contract_id,
     ah.position_side,
     ah.base_qty,
@@ -304,15 +308,15 @@ LEFT JOIN raw.daily_settlement_price dsp ON dsp.contract_id = ah.contract_id AND
 ;WITH m AS (
     SELECT
         td.d AS loan_date,
-        aw.account_id,
+        aw.account_no,
         ROUND(aw.base_portfolio * 0.15 * (0.85 + (ABS(CHECKSUM(NEWID())) % 300) / 1000.0), 2) AS margin_loan_balance,
         CAST(0.10 + (ABS(CHECKSUM(NEWID())) % 40) / 100.0 AS DECIMAL(9,4)) AS margin_ratio
     FROM #trading_days td
     CROSS JOIN #account_wealth aw
 )
-INSERT INTO raw.margin_loan_daily (loan_date, account_id, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag)
+INSERT INTO raw.margin_loan_daily (loan_date, account_no, margin_loan_balance, margin_ratio, maintenance_margin_ratio, call_margin_flag)
 SELECT
-    loan_date, account_id, margin_loan_balance, margin_ratio,
+    loan_date, account_no, margin_loan_balance, margin_ratio,
     0.15,
     CASE WHEN margin_ratio < 0.15 THEN 1 ELSE 0 END
 FROM m;

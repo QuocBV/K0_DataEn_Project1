@@ -35,7 +35,7 @@ sources:
       - name: employees
 
   - name: reporting
-    database: ssi_report
+    database: reporting
     schema: reporting
     description: "Reporting Mart Iceberg tables (computed by Spark Commission Engine)"
     tables:

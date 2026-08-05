@@ -1,6 +1,6 @@
 """
 Business Processing: Complex business rules, KPI calculation, ranking, scoring.
-Reads Gold dim/fact tables (Silver + dbt models via Trino), computes business metrics,
+Reads Gold dim/fact tables (Silver + dbt models via Spark Thrift Server), computes business metrics,
 writes Business Fact Iceberg tables.
 
 Usage (spark-submit):
@@ -13,8 +13,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, sum, count, when, rank, desc, lit
 from pyspark.sql.window import Window
 
-SILVER_BUCKET = "s3a://ssi-silver"
-GOLD_BUCKET = "s3a://ssi-gold"
+SILVER_BUCKET = "s3a://ssi-data/silver"
+GOLD_BUCKET = "s3a://ssi-data/gold"
 DATABASE = "gold"
 
 

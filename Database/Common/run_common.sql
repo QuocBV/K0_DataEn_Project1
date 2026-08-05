@@ -8,6 +8,7 @@
 :r 02_organization.sql
 :r 03_broker.sql
 :r 04_customer.sql
+:r 04b_account.sql
 :r 05_customer_classification.sql
 :r 06_market_reference.sql
 :r 07_fee_schedule.sql
