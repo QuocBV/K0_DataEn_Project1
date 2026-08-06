@@ -14,7 +14,7 @@
 cp .env.example .env
 ```
 
-Điền: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AIRFLOW_DB_PASSWORD`, `MSSQL_HOST`, ...
+Điền: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AIRFLOW_DB_PASSWORD`, `MSSQL_HOST`, `TRINO_*`, ...
 
 ## Bước 2: Khởi tạo SQL Server
 
@@ -36,11 +36,11 @@ Ghi lại UUID của 5 connections.
 ## Bước 4: Khởi chạy Docker Compose
 
 ```bash
-docker compose up -d hr-api hive-metastore-db hive-metastore spark-master spark-worker spark-thriftserver
+docker compose up -d hr-api hive-metastore-db hive-metastore trino spark-master spark-worker
 docker compose up -d airflow-postgres airflow-init airflow-webserver airflow-scheduler
 ```
 
-Đợi 1-2 phút cho Spark Thrift Server sẵn sàng (port 10000).
+Đợi 1-2 phút cho Trino sẵn sàng (port 8081).
 
 ## Bước 5: Cấu hình Airflow UI
 
@@ -49,13 +49,13 @@ docker compose up -d airflow-postgres airflow-init airflow-webserver airflow-sch
 
 Bật 11 DAGs: `generate_trades`, `ingest_raw`, `bronze_etl`, `bronze_soda`, `silver_etl`, `silver_soda`, `gold_dbt`, `gold_quality`, `commission_engine`, `reporting`, `main_pipeline`
 
-## Bước 6: Trino (đã bỏ) → Spark Thrift query
+## Bước 6: Query qua Trino
 
 ```sql
--- Dữ liệu khách hàng có time-travel (query qua Spark Thrift, không dùng Trino)
-SELECT * FROM gold.dim_customer
+-- Dữ liệu khách hàng có time-travel
+SELECT * FROM ssi_data.gold.dim_customer
 FOR VERSION AS OF TIMESTAMP '2027-03-15 10:00:00';
 
 -- Báo cáo từ Commission Engine
-SELECT * FROM reporting.rpt_broker_commission_revenue;
+SELECT * FROM ssi_report.reporting.rpt_broker_commission_revenue;
 ```

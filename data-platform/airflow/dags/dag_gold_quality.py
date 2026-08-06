@@ -28,8 +28,9 @@ with DAG(
     soda_scan = BashOperator(
         task_id="soda_scan_gold",
         bash_command=(
-            "cd /opt/airflow/data-platform/soda && "
-            "python run_scan.py checks/gold/gold_quality.yml "
+            "soda scan -d ssi_trino "
+            "-c /opt/airflow/data-platform/soda/configuration.yml "
+            "/opt/airflow/data-platform/soda/checks/gold/gold_quality.yml "
         ),
     )
 

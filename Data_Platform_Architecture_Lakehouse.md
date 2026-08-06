@@ -33,7 +33,7 @@ Silver Iceberg (S3)
 Soda Quality Check
         │
         ▼
-dbt + Spark Thrift Server
+dbt + Trino
         │
         ▼
 Gold Iceberg (S3)
@@ -50,7 +50,7 @@ Business Processing              Reporting / BI
 Business Fact Tables            Reporting Tables
         └───────────────┬───────────────┘
                         ▼
-              Spark Thrift Server
+                    Trino
                         │
                         ▼
                  BI / API / Analytics
@@ -163,7 +163,7 @@ Business Fact Tables            Reporting Tables
 **Technology**
 
 - dbt
-- Spark Thrift Server
+- Trino
 
 **Responsibilities**
 
@@ -176,7 +176,7 @@ Business Fact Tables            Reporting Tables
 
 **Implementation**
 
-- dbt connects to Spark Thrift Server (Iceberg catalog)
+- dbt connects to Trino (Iceberg catalog)
 - Reads Silver Iceberg tables, writes Gold Iceberg tables
 
 **Output**
@@ -249,7 +249,7 @@ Business Fact Tables            Reporting Tables
 
 **Technology**
 
-- Spark Thrift Server
+- Trino
 
 **Responsibilities**
 
@@ -269,7 +269,7 @@ Business Fact Tables            Reporting Tables
 | Orchestration  | Apache Airflow         |
 | ETL Processing | Apache Spark (PySpark) |
 | Modeling       | dbt                    |
-| SQL Engine     | Spark Thrift Server    |
+| SQL Engine     | Trino                  |
 | Data Quality   | Soda                   |
 | BI             | Power BI               |
 
@@ -279,7 +279,7 @@ Business Fact Tables            Reporting Tables
 2.  Airflow orchestrates only; it never processes data.
 3.  Spark handles ETL and complex business processing.
 4.  dbt is responsible for data modeling and reporting.
-5.  Spark Thrift Server provides SQL access to Iceberg tables.
+5.  Trino provides SQL access to Iceberg tables.
 6.  Soda validates data quality after each processing layer.
 7.  Keep business logic separate from data modeling.
 8.  All intermediate and final datasets are stored as Iceberg tables.

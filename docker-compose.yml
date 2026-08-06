@@ -43,8 +43,10 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
-      SPARK_THRIFT_HOST: spark-thriftserver
-      SPARK_THRIFT_PORT: "10000"
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      TRINO_USER: ${TRINO_USER:-admin}
+      TRINO_PASSWORD: ${TRINO_PASSWORD:-}
       OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
       HR_API_BASE_URL: http://hr-api:8000
     entrypoint: /bin/bash
@@ -114,7 +116,23 @@ services:
       timeout: 5s
       retries: 5
 
-  # ====== Spark ======
+  # ====== Trino (SQL query engine for Iceberg - dbt Gold, Soda, BI) ======
+  trino:
+    image: trinodb/trino:462
+    hostname: trino
+    depends_on:
+      - hive-metastore
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./data-platform/trino/catalog:/etc/trino/catalog:ro
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+
+  # ====== Spark (ETL processing: Bronze/Silver/Commission) ======
   spark-master:
     image: bitnami/spark:3.5.1
     hostname: spark-master
@@ -147,34 +165,15 @@ services:
       AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
 
-  # ====== Spark Thrift Server (SQL endpoint for dbt/Soda/BI) ======
-  spark-thriftserver:
-    image: bitnami/spark:3.5.1
-    hostname: spark-thriftserver
-    depends_on:
-      - spark-master
-      - hive-metastore
-    environment:
-      SPARK_MODE: thriftserver
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_THRIFT_METASTORE_URIS: thrift://hive-metastore:9083
-      SPARK_THRIFT_CONF_SPARK_SQL_CATALOG_IMPLEMENTATION: iceberg
-      SPARK_THRIFT_CONF_SPARK_SQL_ICEBERG_CATALOG_TYPE: hive
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
-      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
-    ports:
-      - "10000:10000"
-
   # ====== dbt ======
   dbt:
     build:
       context: ./data-platform/dbt
     environment:
-      SPARK_THRIFT_HOST: spark-thriftserver
-      SPARK_THRIFT_PORT: "10000"
-      SPARK_THRIFT_USER: ${SPARK_THRIFT_USER:-admin}
+      TRINO_HOST: trino
+      TRINO_PORT: "8080"
+      TRINO_USER: ${TRINO_USER:-admin}
+      TRINO_PASSWORD: ${TRINO_PASSWORD:-}
     volumes:
       - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     profiles: ["tools"]

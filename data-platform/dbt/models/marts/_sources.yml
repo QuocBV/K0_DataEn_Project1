@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: silver
-    database: silver
+    database: ssi_data
     schema: silver
     description: "Silver Iceberg tables (cleaned/deduplicated by Spark ETL)"
     tables:
@@ -35,7 +35,7 @@ sources:
       - name: employees
 
   - name: reporting
-    database: reporting
+    database: ssi_report
     schema: reporting
     description: "Reporting Mart Iceberg tables (computed by Spark Commission Engine)"
     tables:

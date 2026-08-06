@@ -2,7 +2,7 @@
 apache-airflow-providers-airbyte==3.9.0
 apache-airflow-providers-apache-spark==4.10.0
 dbt-core==1.8.8
-dbt-spark==1.8.2
-soda-core-spark==3.3.3
+dbt-trino==1.8.3
+soda-core-trino==3.3.3
 soda-core-scientific==3.3.3
 requests
