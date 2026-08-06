@@ -112,17 +112,30 @@ JOIN raw.derivative_contract c ON td.d BETWEEN c.listing_date AND c.maturity_dat
 --    sophisticated subset than equity's 800 - overlap with equity accounts is expected/desired,
 --    it's what rpt_customer_cross_sell measures).
 -------------------------------------------------------------------------------
+-- Each customer may have MULTIPLE derivative accounts (VIP=2, others=1) - derivatives is a more
+-- sophisticated product so account count > customer count but less than equity's expansion.
 INSERT INTO SSI_Common.raw.account (account_no, customer_code, broker_code, product_type, open_date)
-SELECT TOP (250)
-    '0002' + RIGHT('000000' + CAST(ROW_NUMBER() OVER (ORDER BY c.customer_code) AS VARCHAR(6)), 6),
-    c.customer_code,
-    cbh.broker_code,
+SELECT
+    '0002' + RIGHT('000000' +
+        CAST(ROW_NUMBER() OVER (ORDER BY sg.customer_code, sg.acc_seq) AS VARCHAR(6)), 6),
+    sg.customer_code,
+    sg.broker_code,
     'DERIVATIVES',
-    c.open_date
-FROM SSI_Common.raw.customer c
-JOIN SSI_Common.raw.customer_broker_history cbh
-    ON cbh.customer_code = c.customer_code AND cbh.is_current = 1
-WHERE c.customer_type <> 'PROPRIETARY'
+    sg.open_date
+FROM (
+    SELECT c.customer_code, c.open_date, cbh.broker_code,
+           COALESCE(seg.segment, 'RETAIL') AS segment,
+           CASE COALESCE(seg.segment, 'RETAIL') WHEN 'VIP' THEN 2 ELSE 1 END AS n_accounts
+    FROM SSI_Common.raw.customer c
+    JOIN SSI_Common.raw.customer_broker_history cbh
+        ON cbh.customer_code = c.customer_code AND cbh.is_current = 1
+    LEFT JOIN SSI_Common.raw.customer_segment_history seg
+        ON seg.customer_code = c.customer_code AND seg.is_current = 1
+    WHERE c.customer_type <> 'PROPRIETARY'
+) sg
+CROSS APPLY (
+    SELECT TOP (sg.n_accounts) n AS acc_seq FROM sys.all_objects
+) seq
 ORDER BY NEWID();
 
 -------------------------------------------------------------------------------

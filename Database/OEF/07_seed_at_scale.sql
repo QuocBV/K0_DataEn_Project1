@@ -107,17 +107,30 @@ CROSS APPLY (SELECT CAST(10000 + (f.fund_id * 977) % 20000 AS DECIMAL(18,4)) AS 
 -- 3. Accounts: 400 of the 1000 SSI_Common customers get an OEF account (long-term investors -
 --    moderate penetration, lower than the 800 equity accounts).
 -------------------------------------------------------------------------------
+-- Each customer may have MULTIPLE OEF accounts (VIP=2, others=1) - fund investors are buy-and-hold
+-- so expansion is mild, but account count should still exceed customer count.
 INSERT INTO SSI_Common.raw.account (account_no, customer_code, broker_code, product_type, open_date)
-SELECT TOP (400)
-    '0003' + RIGHT('000000' + CAST(ROW_NUMBER() OVER (ORDER BY c.customer_code) AS VARCHAR(6)), 6),
-    c.customer_code,
-    cbh.broker_code,
+SELECT
+    '0003' + RIGHT('000000' +
+        CAST(ROW_NUMBER() OVER (ORDER BY sg.customer_code, sg.acc_seq) AS VARCHAR(6)), 6),
+    sg.customer_code,
+    sg.broker_code,
     'OEF',
-    c.open_date
-FROM SSI_Common.raw.customer c
-JOIN SSI_Common.raw.customer_broker_history cbh
-    ON cbh.customer_code = c.customer_code AND cbh.is_current = 1
-WHERE c.customer_type <> 'PROPRIETARY'
+    sg.open_date
+FROM (
+    SELECT c.customer_code, c.open_date, cbh.broker_code,
+           COALESCE(seg.segment, 'RETAIL') AS segment,
+           CASE COALESCE(seg.segment, 'RETAIL') WHEN 'VIP' THEN 2 ELSE 1 END AS n_accounts
+    FROM SSI_Common.raw.customer c
+    JOIN SSI_Common.raw.customer_broker_history cbh
+        ON cbh.customer_code = c.customer_code AND cbh.is_current = 1
+    LEFT JOIN SSI_Common.raw.customer_segment_history seg
+        ON seg.customer_code = c.customer_code AND seg.is_current = 1
+    WHERE c.customer_type <> 'PROPRIETARY'
+) sg
+CROSS APPLY (
+    SELECT TOP (sg.n_accounts) n AS acc_seq FROM sys.all_objects
+) seq
 ORDER BY NEWID();
 
 -------------------------------------------------------------------------------
