@@ -139,6 +139,19 @@ services:
       AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
 
+  # ====== BI - Apache Superset (13 báo cáo qua Trino) ======
+  superset:
+    build: ./data-platform/superset
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-change-me}
+      TRINO_URI: trino://admin@trino:8080/ssi_report
+    depends_on: [trino]
+    ports: ["8088:8088"]
+    volumes:
+      - ./data-platform/superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./data-platform/superset/superset-init.sh:/app/docker-init.sh
+    command: /bin/bash -c "chmod +x /app/docker-init.sh && /app/docker-init.sh && superset run -p 8088 --with-threads --reload --debugger"
+
   # ====== dbt ======
   dbt:
     build:

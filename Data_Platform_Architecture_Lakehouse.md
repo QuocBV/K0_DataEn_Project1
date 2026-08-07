@@ -12,7 +12,7 @@ Airbyte / Debezium / Python
 S3 Raw (Parquet)
         │
         ▼
-Airflow Orchestration
+Dagster Orchestration
         │
         ▼
 Spark Bronze ETL (PySpark)
@@ -83,7 +83,7 @@ Business Fact Tables            Reporting Tables
 
 **Technology**
 
-- Airflow
+- Dagster
 - Spark (PySpark)
 - Apache Iceberg
 
@@ -266,7 +266,7 @@ Business Fact Tables            Reporting Tables
 | Storage        | Amazon S3              |
 | Table Format   | Apache Iceberg         |
 | Ingestion      | Airbyte                |
-| Orchestration  | Apache Airflow         |
+| Orchestration  | Dagster                |
 | ETL Processing | Apache Spark (PySpark) |
 | Modeling       | dbt                    |
 | SQL Engine     | Trino                  |
@@ -276,7 +276,7 @@ Business Fact Tables            Reporting Tables
 # Design Principles
 
 1.  Store all data in Amazon S3 using Iceberg tables.
-2.  Airflow orchestrates only; it never processes data.
+2.  Dagster orchestrates only; it never processes data.
 3.  Spark handles ETL and complex business processing.
 4.  dbt is responsible for data modeling and reporting.
 5.  Trino provides SQL access to Iceberg tables.

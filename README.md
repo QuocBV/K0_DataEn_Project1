@@ -70,11 +70,11 @@ data-platform/
   dbt/models/marts/        dim/, fact/, reports/ (views)
   dbt/snapshots/           SCD2 snapshot: snap_customer_profile
   trino/catalog/           ssi_data.properties + ssi_report.properties
-  airflow/dags/            10 DAGs
-docker-compose.yml         Airflow + Spark (Master/Worker) + Trino + Hive Metastore + dbt
+  dagster/                 Jobs/Assets/Schedules (orchestration)
+docker-compose.yml         Dagster + Spark (Master/Worker) + Trino + Hive Metastore + dbt + Superset
 ```
 
-## 10 Airflow DAGs
+## Dagster Jobs (thay Airflow DAGs)
 
 | #   | DAG                     | Vai trò                  | Ghi vào                          |
 | --- | ----------------------- | ------------------------ | -------------------------------- |
@@ -88,6 +88,12 @@ docker-compose.yml         Airflow + Spark (Master/Worker) + Trino + Hive Metast
 | 7   | `gold_quality`          | dbt test + Soda          | -                                |
 | 8   | **`commission_engine`** | **Spark tính 13 report** | **`s3://ssi-report/reporting/`** |
 | 9   | `reporting`             | dbt views (SELECT \*)    | Trino views                      |
+
+## BI - Apache Superset
+
+- UI: `http://localhost:8088` (user/pass `admin`)
+- Datasource: Trino catalog `ssi_report` (13 view `reporting.rpt_*`) — scan trong **Databases** sau khi có dữ liệu từ pipeline.
+- Sơ đồ 13 báo cáo→chart: README mục dưới.
 
 ## 13 Reports (tính bởi Spark Commission Engine)
 

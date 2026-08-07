@@ -1,4 +1,4 @@
-# Hướng dẫn cài đặt Lakehouse Platform
+# Hướng dẫn cài đặt Lakehouse Platform (Dagster + Superset)
 
 ## 0. Yêu cầu trước khi bắt đầu
 
@@ -14,7 +14,7 @@
 cp .env.example .env
 ```
 
-Điền: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AIRFLOW_DB_PASSWORD`, `MSSQL_HOST`, `TRINO_*`, ...
+Điền: `AWS_*`, `DAGSTER_POSTGRES_PASSWORD`, `CONN_*` (UUID connection từ Airbyte UI), `TRINO_*`, `MSSQL_HOST`.
 
 ## Bước 2: Khởi tạo SQL Server
 
@@ -31,31 +31,29 @@ abctl local install
 
 Tạo: Sources (MSSQL ×4 + HR API) → Destination S3 (`ssi-data/raw/{source}/{table}/{date}/`)
 
-Ghi lại UUID của 5 connections.
+Ghi UUID của 5 connections vào `.env`: `CONN_MSSQL_COMMON`, `CONN_MSSQL_EQUITY`, `CONN_MSSQL_DERIVATIVES`, `CONN_MSSQL_OEF`, `CONN_HR_API`.
 
 ## Bước 4: Khởi chạy Docker Compose
 
 ```bash
 docker compose up -d hr-api hive-metastore-db hive-metastore trino spark-master spark-worker
-docker compose up -d airflow-postgres airflow-init airflow-webserver airflow-scheduler
+docker compose up -d dagster-postgres dagster-code-location dagster-daemon superset
 ```
 
-Đợi 1-2 phút cho Trino sẵn sàng (port 8081).
+- **Dagster UI**: http://localhost:3000 (jobs: ingest_raw, generate_trades, main_pipeline, soda_quality)
+- **Superset UI**: http://localhost:8088 (user/pass `admin`)
 
-## Bước 5: Cấu hình Airflow UI
+Trước khi chạy dbt assets (Dagster): `cd data-platform/dbt && dbt deps && dbt parse` (sinh `target/manifest.json`).
 
-1. **Connections**: `airbyte_default` (Airbyte), `spark_default` (spark://spark-master:7077)
-2. **Variables**: `airbyte_connection_ids` (JSON map: mssql_common_to_s3, ..., hr_api_to_s3)
+## Bước 5: Kết nối BI - Superset
 
-Bật 11 DAGs: `generate_trades`, `ingest_raw`, `bronze_etl`, `bronze_soda`, `silver_etl`, `silver_soda`, `gold_dbt`, `gold_quality`, `commission_engine`, `reporting`, `main_pipeline`
+1. Mở http://localhost:8088 → **Databases** → **+ Database**
+2. SQLAlchemy URI: `trino://admin@trino:8080/ssi_report`
+3. Scan → 13 datasets từ các view `reporting.rpt_*`, tạo dashboard.
 
 ## Bước 6: Query qua Trino
 
 ```sql
--- Dữ liệu khách hàng có time-travel
-SELECT * FROM ssi_data.gold.dim_customer
-FOR VERSION AS OF TIMESTAMP '2027-03-15 10:00:00';
-
--- Báo cáo từ Commission Engine
+SELECT * FROM ssi_data.gold.dim_customer FOR VERSION AS OF TIMESTAMP '2027-03-15 10:00:00';
 SELECT * FROM ssi_report.reporting.rpt_broker_commission_revenue;
 ```
