@@ -1,95 +1,75 @@
-# Local dev/test orchestration for Lakehouse platform.
+# Local dev/test orchestration for Lakehouse platform (Dagster orchestration).
 services:
   hr-api:
     build:
       context: ./hr-api
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
     environment:
       HR_API_AUTH_MODE: ${HR_API_AUTH_MODE:-none}
       HR_API_KEY: ${HR_API_KEY:-}
       HR_API_JWT_SECRET: ${HR_API_JWT_SECRET:-}
     ports:
       - "8000:8000"
-    restart: unless-stopped
 
-  # ====== Airflow ======
-  airflow-postgres:
+  # ====== Dagster (thay Airflow) ======
+  dagster-postgres:
     image: postgres:16.4
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
-      POSTGRES_DB: airflow
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      POSTGRES_DB: dagster
     volumes:
-      - airflow_postgres_data:/var/lib/postgresql/data
+      - dagster_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      test: ["CMD-SHELL", "pg_isready -U dagster"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  airflow-init:
+  dagster-code-location:
     build:
-      context: ./data-platform/airflow
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    depends_on:
-      airflow-postgres:
-        condition: service_healthy
-    environment: &airflow-common-env
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${AIRFLOW_DB_PASSWORD}@airflow-postgres/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      context: ./data-platform/dagster
+    environment: &dagster-env
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_HOME: /opt/dagster
       TRINO_HOST: trino
       TRINO_PORT: "8080"
       TRINO_USER: ${TRINO_USER:-admin}
       TRINO_PASSWORD: ${TRINO_PASSWORD:-}
-      OPS_ALERT_WEBHOOK_URL: ${OPS_ALERT_WEBHOOK_URL:-}
-      HR_API_BASE_URL: http://hr-api:8000
-    entrypoint: /bin/bash
-    command: -c "airflow db migrate && airflow users create --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@ssi.com.vn"
-
-  airflow-webserver:
-    build:
-      context: ./data-platform/airflow
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-    environment: *airflow-common-env
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AIRBYTE_HOST: airbyte
+      AIRBYTE_PORT: "8000"
+      CONN_MSSQL_COMMON: ${CONN_MSSQL_COMMON:-}
+      CONN_MSSQL_EQUITY: ${CONN_MSSQL_EQUITY:-}
+      CONN_MSSQL_DERIVATIVES: ${CONN_MSSQL_DERIVATIVES:-}
+      CONN_MSSQL_OEF: ${CONN_MSSQL_OEF:-}
+      CONN_HR_API: ${CONN_HR_API:-}
     volumes:
+      - ./data-platform/dagster:/opt/dagster
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
       - ./data-platform/spark:/opt/airflow/data-platform/spark
       - ./data-platform/soda:/opt/airflow/data-platform/soda
+    command: dagster-webserver -h 0.0.0.0 -p 3000
     ports:
-      - "8080:8080"
-    command: webserver
-    restart: unless-stopped
+      - "3000:3000"
 
-  airflow-scheduler:
+  dagster-daemon:
     build:
-      context: ./data-platform/airflow
-      args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-}
-    depends_on:
-      airflow-init:
-        condition: service_completed_successfully
-    environment: *airflow-common-env
+      context: ./data-platform/dagster
+    environment: *dagster-env
     volumes:
+      - ./data-platform/dagster:/opt/dagster
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
       - ./data-platform/spark:/opt/airflow/data-platform/spark
       - ./data-platform/soda:/opt/airflow/data-platform/soda
-    command: scheduler
-    restart: unless-stopped
+    command: dagster-daemon run
 
   # ====== Hive Metastore ======
   hive-metastore:
     image: apache/hive:4.0.0
-    hostname: hive-metastore
+    depends_on:
+      - hive-metastore-db
     environment:
       HMS_DATABASE_DRIVER: org.postgresql.Driver
       HMS_DATABASE_URL: jdbc:postgresql://hive-metastore-db:5432/metastore
@@ -98,9 +78,6 @@ services:
       S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
       S3_ACCESS_KEY: ${AWS_ACCESS_KEY_ID}
       S3_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY}
-    depends_on:
-      hive-metastore-db:
-        condition: service_healthy
     ports:
       - "9083:9083"
 
@@ -116,10 +93,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # ====== Trino (SQL query engine for Iceberg - dbt Gold, Soda, BI) ======
+  # ====== Trino (SQL engine) ======
   trino:
     image: trinodb/trino:462
-    hostname: trino
     depends_on:
       - hive-metastore
     ports:
@@ -132,10 +108,9 @@ services:
       AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
 
-  # ====== Spark (ETL processing: Bronze/Silver/Commission) ======
+  # ====== Spark ======
   spark-master:
     image: bitnami/spark:3.5.1
-    hostname: spark-master
     environment:
       SPARK_MODE: master
       SPARK_RPC_AUTHENTICATION_ENABLED: "no"
@@ -152,7 +127,6 @@ services:
 
   spark-worker:
     image: bitnami/spark:3.5.1
-    hostname: spark-worker
     depends_on:
       - spark-master
     environment:
@@ -190,5 +164,5 @@ services:
     profiles: ["sqlserver"]
 
 volumes:
-  airflow_postgres_data:
+  dagster_postgres_data:
   mssql_data:
