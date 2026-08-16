@@ -15,6 +15,15 @@ clean-targets: ["target", "dbt_packages"]
 
 models:
   ssi_trading_analytics:
+    staging:
+      bronze:
+        +materialized: table
+        +schema: bronze
+        +tags: ["bronze"]
+      silver:
+        +materialized: table
+        +schema: silver
+        +tags: ["silver"]
     marts:
       +materialized: table
       +schema: gold
@@ -26,5 +35,7 @@ models:
         +materialized: view
         +tags: ["intermediate"]
       reports:
-        +materialized: view
+        +materialized: table
+        +database: ssi_report
+        +schema: reporting
         +tags: ["report"]

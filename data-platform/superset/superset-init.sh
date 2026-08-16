@@ -8,5 +8,5 @@ superset fab create-admin \
   --email admin@ssi.com.vn --password admin || true
 superset init
 
-superset set-database-uri "Trino Reporting" "trino://admin@trino:8080/ssi_report" || true
+superset set-database-uri "Trino_Reporting" "trino://admin@trino:8080/ssi_report" || true
 echo "Superset init complete."

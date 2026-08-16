@@ -48,8 +48,8 @@ services:
     volumes:
       - ./data-platform/dagster:/opt/dagster
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
-      - ./data-platform/spark:/opt/airflow/data-platform/spark
       - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     command: dagster-webserver -h 0.0.0.0 -p 3000
     ports:
       - "3000:3000"
@@ -61,8 +61,8 @@ services:
     volumes:
       - ./data-platform/dagster:/opt/dagster
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt
-      - ./data-platform/spark:/opt/airflow/data-platform/spark
       - ./data-platform/soda:/opt/airflow/data-platform/soda
+      - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     command: dagster-daemon run
 
   # ====== Hive Metastore ======
@@ -107,37 +107,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
-
-  # ====== Spark ======
-  spark-master:
-    image: bitnamilegacy/spark:3.5.1
-    environment:
-      SPARK_MODE: master
-      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
-      SPARK_RPC_ENCRYPTION_ENABLED: "no"
-      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
-      SPARK_SSL_ENABLED: "no"
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
-      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
-    ports:
-      - "7077:7077"
-      - "8082:8080"
-
-  spark-worker:
-    image: bitnamilegacy/spark:3.5.1
-    depends_on:
-      - spark-master
-    environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 8G
-      SPARK_WORKER_CORES: 4
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-s3.amazonaws.com}
-      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      MSSQL_EXPORT_USER: ${MSSQL_EXPORT_USER}
+      MSSQL_EXPORT_PASSWORD: ${MSSQL_EXPORT_PASSWORD}
 
   # ====== BI - Apache Superset (13 báo cáo qua Trino) ======
   superset:
@@ -150,7 +121,7 @@ services:
     volumes:
       - ./data-platform/superset/superset_config.py:/app/pythonpath/superset_config.py
       - ./data-platform/superset/superset-init.sh:/app/docker-init.sh
-    command: /bin/bash -c "chmod +x /app/docker-init.sh && /app/docker-init.sh && superset run -p 8088 --with-threads --reload --debugger"
+    command: /bin/bash -c "bash /app/docker-init.sh && superset run -h 0.0.0.0 -p 8088 --with-threads --reload --debugger"
 
   # ====== dbt ======
   dbt:
@@ -161,21 +132,11 @@ services:
       TRINO_PORT: "8080"
       TRINO_USER: ${TRINO_USER:-admin}
       TRINO_PASSWORD: ${TRINO_PASSWORD:-}
+    working_dir: /dbt
     volumes:
+      - ./data-platform/dbt:/dbt
       - ./data-platform/dbt/profiles.yml:/root/.dbt/profiles.yml:ro
     profiles: ["tools"]
 
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
-    ports:
-      - "1433:1433"
-    volumes:
-      - mssql_data:/var/opt/mssql
-    profiles: ["sqlserver"]
-
 volumes:
   dagster_postgres_data:
-  mssql_data:

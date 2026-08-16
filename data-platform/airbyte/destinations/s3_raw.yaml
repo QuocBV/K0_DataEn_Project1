@@ -1,0 +1,20 @@
+# Octavia CLI destination config - shared S3 destination used by all source connections.
+# Lands each source as Parquet on s3://ssi-data/raw/{source}/{table}/{date}/ (see connections).
+definition_type: destination
+resource_name: "s3_raw"
+definition_id: 4816b78f-1489-44c1-9060-4b19d5cb936b # S3 destination connector
+configuration:
+  destination_type: "s3"
+  url: "https://s3.amazonaws.com"
+  provider:
+    provider:
+      bucket: "ssi-data"
+      path_prefix: "raw"
+      region: "${AWS_REGION}"
+      end_point: "https://s3.amazonaws.com"
+      access_key_id: "${AWS_ACCESS_KEY_ID}"
+      secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+  format:
+    format_type: "Parquet"
+    compression_codec: "SNAPPY"
+  part_size: 64

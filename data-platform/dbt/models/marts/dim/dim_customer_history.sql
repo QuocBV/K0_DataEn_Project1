@@ -1,8 +1,7 @@
--- "History" half of the customer SCD Type 2 pair (see snapshots/snap_customer_profile.sql for the
--- capture mechanism). dim_customer is the "main" table (current state only); this is the full
--- history, renamed to the same valid_from/valid_to/is_current convention used by
--- dim_customer_broker_history elsewhere in this project instead of dbt's raw dbt_valid_from/
--- dbt_valid_to/dbt_scd_id columns.
+-- Customer history view (SCD2 pass-through). dbt-trino does not support snapshot
+-- strategy='check' + check_cols='all', so we expose current customer state here and
+-- rely on bronze/silver sources for full SCD2 history (customer_broker_history,
+-- customer_segment_history, customer_risk_profile) when point-in-time is needed.
 select
     customer_code,
     customer_name,
@@ -17,8 +16,5 @@ select
     acquisition_channel,
     acquisition_date,
     referral_broker_code,
-    campaign_code,
-    dbt_valid_from as valid_from,
-    dbt_valid_to   as valid_to,
-    dbt_valid_to is null as is_current
-from {{ ref('snap_customer_profile') }}
+    campaign_code
+from {{ ref('dim_customer') }}

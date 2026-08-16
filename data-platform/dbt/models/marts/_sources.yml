@@ -1,10 +1,99 @@
 version: 2
 
 sources:
+  - name: raw_common
+    database: raw
+    schema: common
+    description: "Raw Parquet from SSI_Common (Airbyte -> s3://ssi-data/raw/COMMON/)"
+    tables:
+      - name: branch
+      - name: department
+      - name: broker
+      - name: customer
+      - name: customer_broker_history
+      - name: customer_risk_profile
+      - name: customer_segment_history
+      - name: customer_acquisition
+      - name: fee_schedule
+      - name: management_commission_schedule
+      - name: market_index_price
+      - name: trading_alert
+      - name: customer_complaint
+      - name: account
+      - name: employees
+
+  - name: raw_equity
+    database: raw
+    schema: equity
+    description: "Raw Parquet from SSI_Equity (Airbyte -> s3://ssi-data/raw/EQUITY/)"
+    tables:
+      - name: security
+      - name: daily_price
+      - name: equity_trade
+      - name: account_balance_daily
+      - name: position_daily
+      - name: margin_loan_daily
+
+  - name: raw_derivatives
+    database: raw
+    schema: derivatives
+    description: "Raw Parquet from SSI_Derivatives (Airbyte -> s3://ssi-data/raw/DERIVATIVES/)"
+    tables:
+      - name: derivative_contract
+      - name: daily_settlement_price
+      - name: derivative_trade
+      - name: account_balance_daily
+      - name: position_daily
+      - name: margin_loan_daily
+
+  - name: raw_oef
+    database: raw
+    schema: oef
+    description: "Raw Parquet from SSI_OEF (Airbyte -> s3://ssi-data/raw/OEF/)"
+    tables:
+      - name: fund
+      - name: fund_nav_history
+      - name: oef_trade
+      - name: account_balance_daily
+      - name: position_daily
+
+  - name: bronze
+    database: ssi_data
+    schema: bronze
+    description: "Bronze Iceberg tables (raw -> Iceberg, written by dbt transform)"
+    tables:
+      - name: branch
+      - name: department
+      - name: broker
+      - name: customer
+      - name: customer_broker_history
+      - name: customer_risk_profile
+      - name: customer_segment_history
+      - name: customer_acquisition
+      - name: fee_schedule
+      - name: management_commission_schedule
+      - name: market_index_price
+      - name: trading_alert
+      - name: customer_complaint
+      - name: account
+      - name: employees
+      - name: security
+      - name: daily_price
+      - name: equity_trade
+      - name: account_balance_daily
+      - name: position_daily
+      - name: margin_loan_daily
+      - name: derivative_contract
+      - name: daily_settlement_price
+      - name: derivative_trade
+      - name: fund
+      - name: fund_nav_history
+      - name: oef_trade
+
   - name: silver
     database: ssi_data
     schema: silver
-    description: "Silver Iceberg tables (cleaned/deduplicated by Spark ETL)"
+    description: "Silver Iceberg tables (cleaned/deduplicated from bronze by dbt)"
     tables:
       - name: branch
       - name: department

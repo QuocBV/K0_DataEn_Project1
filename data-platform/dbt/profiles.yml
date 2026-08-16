@@ -1,0 +1,17 @@
+# dbt connects to Trino - ssi_data catalog for gold layer, mssql catalog for raw source data
+ssi_trading_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none
+      user: "{{ env_var('TRINO_USER', 'admin') }}"
+      password: "{{ env_var('TRINO_PASSWORD', '') }}"
+      database: ssi_data
+      schema: gold
+      host: "{{ env_var('TRINO_HOST', 'localhost') }}"
+      port: "{{ env_var('TRINO_PORT', '8080') | int }}"
+      threads: 8
+      http_scheme: "{{ env_var('TRINO_HTTP_SCHEME', 'http') }}"
+      session_properties:
+        query_max_run_time: 10m

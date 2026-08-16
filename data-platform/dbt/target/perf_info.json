@@ -1,0 +1,62 @@
+{
+    "path_count": 266,
+    "parsed_path_count": 266,
+    "static_analysis_path_count": 86,
+    "static_analysis_parsed_path_count": 79,
+    "is_partial_parse_enabled": true,
+    "is_static_analysis_enabled": true,
+    "read_files_elapsed": 2.7891744999997172,
+    "load_macros_elapsed": 2.0988593630008836,
+    "parse_project_elapsed": 1.7030627450003522,
+    "patch_sources_elapsed": 0.026507881999350502,
+    "process_manifest_elapsed": 0.05888761300047918,
+    "load_all_elapsed": 7.013825096000801,
+    "projects": [
+        {
+            "project_name": "ssi_trading_analytics",
+            "elapsed": 1.6695778470002551,
+            "parsers": [
+                {
+                    "parser": "model",
+                    "elapsed": 0.98161290400094,
+                    "parsed_path_count": 86
+                },
+                {
+                    "parser": "snapshot",
+                    "elapsed": 0.007229331999042188,
+                    "parsed_path_count": 1
+                },
+                {
+                    "parser": "test",
+                    "elapsed": 0.6716868719995546,
+                    "parsed_path_count": 2
+                }
+            ],
+            "parsed_path_count": 89
+        },
+        {
+            "project_name": "dbt_trino",
+            "elapsed": 0.011896410000190372,
+            "parsers": [],
+            "parsed_path_count": 0
+        },
+        {
+            "project_name": "dbt",
+            "elapsed": 0.01163469399944006,
+            "parsers": [
+                {
+                    "parser": "doc",
+                    "elapsed": 0.0004384260009828722,
+                    "parsed_path_count": 1
+                }
+            ],
+            "parsed_path_count": 1
+        },
+        {
+            "project_name": "dbt_utils",
+            "elapsed": 0.00943336200180056,
+            "parsers": [],
+            "parsed_path_count": 0
+        }
+    ]
+}

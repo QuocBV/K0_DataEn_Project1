@@ -3,4 +3,4 @@ WORKDIR /opt/dagster
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-ENTRYPOINT ["dagster"]
+CMD ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000"]

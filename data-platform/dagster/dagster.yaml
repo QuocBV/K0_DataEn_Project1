@@ -2,16 +2,19 @@ storage:
   postgres:
     postgres_db:
       username: dagster
-      password: ${DAGSTER_POSTGRES_PASSWORD}
+      password: dagster_dev_password
       hostname: dagster-postgres
       db_name: dagster
       port: 5432
 
 run_launcher:
-  type: DefaultRunLauncher
+  class: DefaultRunLauncher
+  module: dagster.core.launcher
 
 run_coordinator:
-  type: QueuedRunCoordinator
+  class: QueuedRunCoordinator
+  module: dagster.core.run_coordinator
 
 scheduler:
-  type: DagsterDaemonScheduler
+  class: DagsterDaemonScheduler
+  module: dagster.core.scheduler

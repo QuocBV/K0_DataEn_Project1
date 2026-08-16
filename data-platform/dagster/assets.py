@@ -1,22 +1,12 @@
-"""Dagster assets: Airbyte raw, Spark ETL, Soda, dbt Gold/Reporting."""
+"""Dagster assets: Airbyte raw ingest, dbt transform (bronze->silver->gold->reporting), Soda quality."""
 import os, subprocess
-from dagster import asset, op, AssetSelection
+from dagster import asset, AssetSelection
 from dagster_airbyte import AirbyteResource
 from dagster_dbt import dbt_assets, DbtCliResource, DbtManifestAssetSelection
 from resources import airbyte_resource, dbt_resource, AIRBYTE_CONNECTION_IDS
 
 DBT_PROJECT = "/opt/airflow/data-platform/dbt"
 SODA_DIR = "/opt/airflow/data-platform/soda"
-SPARK_DIR = "/opt/airflow/data-platform/spark/jobs"
-SPARK_MASTER = os.getenv("SPARK_MASTER", "spark://spark-master:7077")
-
-
-def _spark(job, script, *args):
-    cmd = ["spark-submit", "--master", SPARK_MASTER, script] + list(args)
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(r.stderr)
-    return r.stdout
 
 
 def _soda(checks):
@@ -42,50 +32,28 @@ raw_equity = _raw("equity", "mssql_equity_to_s3")
 raw_deriv = _raw("derivatives", "mssql_derivatives_to_s3")
 raw_oef = _raw("oef", "mssql_oef_to_s3")
 
+# dbt assets - one continuous dbt project, selected by tag so Dagster models the layered DAG.
+# Run order inside dbt is handled by model dependencies (bronze -> silver -> gold -> reporting).
+# Note: requires dbt deps + dbt parse (target/manifest.json) to have been generated first.
 
-@asset(key_prefix=["bronze"], name="bronze_done", deps=[raw_common, raw_equity, raw_deriv, raw_oef])
-def bronze_done(context):
-    for src in ["common", "equity", "derivatives", "oef", "hr"]:
-        _spark("bronze_etl", os.path.join(SPARK_DIR, "bronze_etl.py"), "--date", context.run_config.get("date", "2027-01-01"), "--source", src)
-    return True
-
-
-@asset(key_prefix=["silver"], name="silver_done", deps=[bronze_done])
-def silver_done(context):
-    _spark("silver_etl", os.path.join(SPARK_DIR, "silver_etl.py"), "--date", context.run_config.get("date", "2027-01-01"))
-    return True
+@dbt_assets(manifest=os.path.join(DBT_PROJECT, "target", "manifest.json"))
+def all_dbt_assets(context, dbt: DbtCliResource):
+    yield from dbt.cli(["run", "--models", "tag:bronze"], context=context)
+    yield from dbt.cli(["run", "--models", "tag:silver"], context=context)
+    yield from dbt.cli(["run", "--models", "tag:dimension tag:fact"], context=context)
+    yield from dbt.cli(["run", "--models", "tag:report"], context=context)
 
 
-@asset(key_prefix=["quality"], name="bronze_checked", deps=[bronze_done])
+@asset(key_prefix=["quality"], name="bronze_checked", deps=[raw_common, raw_equity, raw_deriv, raw_oef])
 def bronze_checked(_):
     return _soda("bronze/bronze_quality.yml")
 
 
-@asset(key_prefix=["quality"], name="silver_checked", deps=[silver_done])
+@asset(key_prefix=["quality"], name="silver_checked", deps=[all_dbt_assets])
 def silver_checked(_):
     return _soda("silver/silver_quality.yml")
 
 
-# dbt Gold + Reporting (Trino) - requires target/manifest.json
-@dbt_assets(manifest=os.path.join(DBT_PROJECT, "target", "manifest.json"),
-            select=AssetSelection.all().to_selector_string() if False else "path:models/marts")
-def gold_dbt_assets(context, dbt: DbtCliResource):
-    yield from dbt.cli(["run", "--select", "path:models/marts", "--exclude", "dim_customer_history"], context=context)
-    yield from dbt.cli(["snapshot"], context=context)
-    yield from dbt.cli(["run", "--select", "dim_customer_history"], context=context)
-
-
-@dbt_assets(manifest=os.path.join(DBT_PROJECT, "target", "manifest.json"), select="path:models/marts/reports")
-def reporting_dbt_assets(context, dbt: DbtCliResource):
-    yield from dbt.cli(["run", "--select", "path:models/marts/reports"], context=context)
-
-
-@asset(key_prefix=["reporting"], name="commission_done", deps=[gold_dbt_assets])
-def commission_done(context):
-    _spark("commission_engine", os.path.join(SPARK_DIR, "commission_engine.py"), "--date", context.run_config.get("date", "2027-01-01"))
-    return True
-
-
-@asset(key_prefix=["quality"], name="gold_checked", deps=[gold_dbt_assets, commission_done])
+@asset(key_prefix=["quality"], name="gold_checked", deps=[all_dbt_assets])
 def gold_checked(_):
     return _soda("gold/gold_quality.yml")

@@ -4,7 +4,7 @@ from dagster_airbyte import AirbyteResource
 from dagster_dbt import DbtCliResource
 
 AIRBYTE_HOST = os.getenv("AIRBYTE_HOST", "airbyte")
-AIRBYTE_PORT = int(os.getenv("AIRBYTE_PORT", "8000"))
+AIRBYTE_PORT = os.getenv("AIRBYTE_PORT", "8000")
 
 # Airbyte connections IDs set in Airflow-style variable/secret (user creates them in UI)
 AIRBYTE_CONNECTION_IDS = {
