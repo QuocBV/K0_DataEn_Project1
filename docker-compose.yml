@@ -110,7 +110,7 @@ services:
 
   # ====== Spark ======
   spark-master:
-    image: bitnami/spark:3.5.1
+    image: bitnamilegacy/spark:3.5.1
     environment:
       SPARK_MODE: master
       SPARK_RPC_AUTHENTICATION_ENABLED: "no"
@@ -126,7 +126,7 @@ services:
       - "8082:8080"
 
   spark-worker:
-    image: bitnami/spark:3.5.1
+    image: bitnamilegacy/spark:3.5.1
     depends_on:
       - spark-master
     environment:
