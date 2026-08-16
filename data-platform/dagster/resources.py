@@ -7,12 +7,12 @@ AIRBYTE_HOST = os.getenv("AIRBYTE_HOST", "airbyte")
 AIRBYTE_PORT = os.getenv("AIRBYTE_PORT", "8000")
 
 # Airbyte connections IDs set in Airflow-style variable/secret (user creates them in UI)
+# HR data is now a view (raw.employees) inside SSI_Common - no separate HR connection needed.
 AIRBYTE_CONNECTION_IDS = {
     "mssql_common_to_s3": os.getenv("CONN_MSSQL_COMMON", ""),
     "mssql_equity_to_s3": os.getenv("CONN_MSSQL_EQUITY", ""),
     "mssql_derivatives_to_s3": os.getenv("CONN_MSSQL_DERIVATIVES", ""),
     "mssql_oef_to_s3": os.getenv("CONN_MSSQL_OEF", ""),
-    "hr_api_to_s3": os.getenv("CONN_HR_API", ""),
 }
 
 airbyte_resource = AirbyteResource(host=AIRBYTE_HOST, port=AIRBYTE_PORT)

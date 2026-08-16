@@ -8,7 +8,7 @@ services:
       HR_API_KEY: ${HR_API_KEY:-}
       HR_API_JWT_SECRET: ${HR_API_JWT_SECRET:-}
     ports:
-      - "8000:8000"
+      - "8005:8000"
 
   # ====== Dagster (thay Airflow) ======
   dagster-postgres:
@@ -38,13 +38,12 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
-      AIRBYTE_HOST: airbyte
-      AIRBYTE_PORT: "8000"
+      AIRBYTE_HOST: host.docker.internal
+      AIRBYTE_PORT: "8001"
       CONN_MSSQL_COMMON: ${CONN_MSSQL_COMMON:-}
       CONN_MSSQL_EQUITY: ${CONN_MSSQL_EQUITY:-}
       CONN_MSSQL_DERIVATIVES: ${CONN_MSSQL_DERIVATIVES:-}
       CONN_MSSQL_OEF: ${CONN_MSSQL_OEF:-}
-      CONN_HR_API: ${CONN_HR_API:-}
     volumes:
       - ./data-platform/dagster:/opt/dagster
       - ./data-platform/dbt:/opt/airflow/data-platform/dbt

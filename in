@@ -1,0 +1,13 @@
+"""Inspect .airbyte/abctl data dir for existing Airbyte config/compose."""
+import os
+
+base = os.path.expandvars(r"%USERPROFILE%\.airbyte\abctl")
+for root, dirs, files in os.walk(base):
+    depth = root[len(base):].count(os.sep)
+    if depth <= 2:
+        rel = root[len(base):]
+        print(f"[{rel or '/'}]")
+        for f in sorted(files)[:30]:
+            fp = os.path.join(root, f)
+            size = os.path.getsize(fp)
+            print(f"    {f} ({size}B)")

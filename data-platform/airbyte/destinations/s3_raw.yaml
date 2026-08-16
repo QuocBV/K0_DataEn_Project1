@@ -1,5 +1,5 @@
-# Octavia CLI destination config - shared S3 destination used by all source connections.
-# Lands each source as Parquet on s3://ssi-data/raw/{source}/{table}/{date}/ (see connections).
+# Octavia CLI destination config - shared S3 destination used by all MSSQL source connections.
+# Lands each source as Parquet on s3://de-project-commission/raw/{namespace}/{stream}/
 definition_type: destination
 resource_name: "s3_raw"
 definition_id: 4816b78f-1489-44c1-9060-4b19d5cb936b # S3 destination connector
@@ -8,7 +8,7 @@ configuration:
   url: "https://s3.amazonaws.com"
   provider:
     provider:
-      bucket: "ssi-data"
+      bucket: "de-project-commission"
       path_prefix: "raw"
       region: "${AWS_REGION}"
       end_point: "https://s3.amazonaws.com"

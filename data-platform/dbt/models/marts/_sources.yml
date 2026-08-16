@@ -3,8 +3,8 @@ version: 2
 sources:
   - name: raw_common
     database: raw
-    schema: common
-    description: "Raw Parquet from SSI_Common (Airbyte -> s3://ssi-data/raw/COMMON/)"
+    schema: "SSI_Common"
+    description: "Raw Parquet from SSI_Common (Airbyte -> s3://de-project-commission/raw/SSI_Common/)"
     tables:
       - name: branch
       - name: department
@@ -24,8 +24,8 @@ sources:
 
   - name: raw_equity
     database: raw
-    schema: equity
-    description: "Raw Parquet from SSI_Equity (Airbyte -> s3://ssi-data/raw/EQUITY/)"
+    schema: "SSI_Equity"
+    description: "Raw Parquet from SSI_Equity (Airbyte -> s3://de-project-commission/raw/SSI_Equity/)"
     tables:
       - name: security
       - name: daily_price
@@ -36,8 +36,8 @@ sources:
 
   - name: raw_derivatives
     database: raw
-    schema: derivatives
-    description: "Raw Parquet from SSI_Derivatives (Airbyte -> s3://ssi-data/raw/DERIVATIVES/)"
+    schema: "SSI_Derivatives"
+    description: "Raw Parquet from SSI_Derivatives (Airbyte -> s3://de-project-commission/raw/SSI_Derivatives/)"
     tables:
       - name: derivative_contract
       - name: daily_settlement_price
@@ -48,8 +48,8 @@ sources:
 
   - name: raw_oef
     database: raw
-    schema: oef
-    description: "Raw Parquet from SSI_OEF (Airbyte -> s3://ssi-data/raw/OEF/)"
+    schema: "SSI_OEF"
+    description: "Raw Parquet from SSI_OEF (Airbyte -> s3://de-project-commission/raw/SSI_OEF/)"
     tables:
       - name: fund
       - name: fund_nav_history
