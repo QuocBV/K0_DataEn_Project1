@@ -9,13 +9,11 @@ from dagster import (
 import assets as assets_mod
 from resources import airbyte_resource, dbt_resource
 
-ingest_raw_assets = [
-    assets_mod.raw_common,
-    assets_mod.raw_equity,
-    assets_mod.raw_deriv,
-    assets_mod.raw_oef,
-]
-ingest_raw_job = define_asset_job("ingest_raw", selection=AssetSelection.assets(*ingest_raw_assets))
+# Airbyte raw assets are auto-discovered from Airbyte API (one asset per MSSQL connection).
+ingest_raw_job = define_asset_job(
+    "ingest_raw",
+    selection=AssetSelection.groups("mssql"),
+)
 main_pipeline_job = define_asset_job("main_pipeline", selection=AssetSelection.all())
 soda_job = define_asset_job("soda_quality", selection=AssetSelection.groups("quality"))
 dbt_job = define_asset_job("dbt_transform", selection=AssetSelection.assets(assets_mod.all_dbt_assets))
@@ -29,10 +27,7 @@ daily_schedule = ScheduleDefinition(
 
 defs = Definitions(
     assets=[
-        assets_mod.raw_common,
-        assets_mod.raw_equity,
-        assets_mod.raw_deriv,
-        assets_mod.raw_oef,
+        *assets_mod.raw_assets,
         assets_mod.all_dbt_assets,
         assets_mod.bronze_checked,
         assets_mod.silver_checked,

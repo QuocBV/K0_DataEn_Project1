@@ -1,0 +1,7 @@
+Dagster UI: 200
+Airbyte connections discoverable:
+Found connections: 4
+'MSSQL-SSI_Common → S3- SSI_Common' e73c1391-3540-48c2-9d19-4aa68ebe73de
+'MSSQL-SSI_Derivatives → S3-SSI_Derivatives' de0a9d20-aff5-4e15-a753-abd1e7b23aab
+'MSSQL-SSI_OEF → S3-SSI_OEF' 8fc84908-34c3-4d89-b7ee-fa54155117c6
+'MSSQL-SSI_Equity → S3-SSI_Equity' af19734e-0172-4064-bd76-bc104ce2002b

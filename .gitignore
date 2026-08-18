@@ -1,2 +1,7 @@
 data-platform/dbt/dbt_packages/dbt_utils/.gitignore
 data-platform/dbt/dbt_packages/
+abctl.zip
+airbyte_s3_accessKeys.csv
+data-platform/dagster/storage/
+data-platform/dbt/target/
+data-platform\dagster\__pycache__

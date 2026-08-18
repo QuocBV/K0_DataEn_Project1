@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw_common
-    database: raw
+    database: ssi_raw
     schema: "SSI_Common"
     description: "Raw Parquet from SSI_Common (Airbyte -> s3://de-project-commission/raw/SSI_Common/)"
     tables:
@@ -23,7 +23,7 @@ sources:
       - name: employees
 
   - name: raw_equity
-    database: raw
+    database: ssi_raw
     schema: "SSI_Equity"
     description: "Raw Parquet from SSI_Equity (Airbyte -> s3://de-project-commission/raw/SSI_Equity/)"
     tables:
@@ -35,7 +35,7 @@ sources:
       - name: margin_loan_daily
 
   - name: raw_derivatives
-    database: raw
+    database: ssi_raw
     schema: "SSI_Derivatives"
     description: "Raw Parquet from SSI_Derivatives (Airbyte -> s3://de-project-commission/raw/SSI_Derivatives/)"
     tables:
@@ -47,7 +47,7 @@ sources:
       - name: margin_loan_daily
 
   - name: raw_oef
-    database: raw
+    database: ssi_raw
     schema: "SSI_OEF"
     description: "Raw Parquet from SSI_OEF (Airbyte -> s3://de-project-commission/raw/SSI_OEF/)"
     tables:

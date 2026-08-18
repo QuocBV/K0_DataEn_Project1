@@ -1,0 +1,13 @@
+"""List Airbyte MSSQL connections (run inside dagster container where dagster_airbyte exists)."""
+import os, sys
+sys.path.insert(0, "/opt/dagster")
+os.environ.setdefault("AIRBYTE_HOST", "host.docker.internal")
+os.environ.setdefault("AIRBYTE_PORT", "8001")
+os.environ.setdefault("AIRBYTE_USER", "airbyte")
+os.environ.setdefault("AIRBYTE_PASSWORD", "password")
+from resources import mssql_connections
+
+conns = mssql_connections()
+print("Found connections:", len(conns))
+for c in conns:
+    print(repr(c["name"]), c["connection_id"])
